@@ -1,0 +1,10 @@
+mesa==3.5.1
+solara==1.64.0
+# Mesa 3.5.1's Solara dashboard needs the Vue 2 widget stack; the 3.x lines
+# (Vue 3) leave the main visualization area blank.
+ipyvue==1.13.0
+ipyvuetify==1.12.0
+matplotlib==3.11.0
+altair==6.0.0
+networkx==3.6.1
+pytest==9.0.3
