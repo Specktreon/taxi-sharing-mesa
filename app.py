@@ -470,4 +470,9 @@ def Page():
         components=[GridView, StatusPanel, ChartsPanel],
         model_params=model_params,
         name=f"Taxi sharing (max extra delay {MAX_EXTRA_DELAY_MINUTES} min)",
+        # Model steps in the UI thread, so each matplotlib frame shows a
+        # finished minute. Mesa 3.5.1 always shows its "Use Threads" checkbox
+        # (no option to hide it); with it ticked the map can be drawn while
+        # the model is mid-step. Raise "Render Interval" to go faster instead.
+        use_threads=False,
     )

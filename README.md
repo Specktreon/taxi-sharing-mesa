@@ -64,8 +64,13 @@ Controls: *Reset*, *Step*, and ▶ / ❚❚ (play/pause). Model parameters:
 
 Every other setting is fixed (section 4). After changing a parameter, press
 *Reset* to rebuild the model. The simulation stops by itself at minute 120.
-Each step redraws two images, so Play runs at about 1-2 minutes per second;
-raise *Render Interval* to go faster.
+Each step redraws two images, so Play runs at about 1-2 minutes per second.
+
+**Leave "Use Threads" off** (its default). Mesa always shows this checkbox,
+but with it ticked the model steps in another thread while the map is being
+drawn, so the app lags or shows half-updated frames. To go faster, raise
+**Render Interval** instead (for example to 5: the map and charts are then
+redrawn every 5 simulated minutes).
 
 The page shows:
 
