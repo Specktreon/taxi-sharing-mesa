@@ -41,6 +41,7 @@ All commands are run from the project folder.
 | Interactive visualization | `python -m solara run app.py` then open http://localhost:8765 |
 | All experiments (S1-S12 x seeds 1-10) | `python run_experiments.py` (about 1 minute) |
 | Selected scenarios / seeds | `python run_experiments.py --only S4 S12 --seeds 1 2` |
+| Analysis experiments (section 8) | `python run_experiments.py --config experiments_sweep.csv --out results_sweep --no-charts`, the same with `experiments_fleet.csv` / `results_fleet`, then `python plot_analysis.py` (a few minutes) |
 | Tests | `python -m pytest` |
 
 Stop the server with **Ctrl+C** in its terminal.
@@ -160,6 +161,9 @@ Columns of `experiments.csv`:
 | `app.py` | Mesa `SolaraViz` interface: sidebar (`UITaxiModel`), city map (`draw_city`), status panel, charts |
 | `run_experiments.py` | Experiment runner (Mesa `batch_run`), CSV export, charts |
 | `experiments.csv` | The 12 scenarios S1-S12 |
+| `experiments_sweep.csv`, `experiments_fleet.csv` | Analysis experiments: load sweep and fleet sizes (section 8) |
+| `plot_analysis.py` | Line charts and fleet-equivalence table for the analysis experiments |
+| `results_sweep/`, `results_fleet/`, `results_analysis/` | Their results, charts and `findings.md` |
 | `tests/` | Pytest suite (`tests/data/` holds reference results of stages 1-2) |
 | `docs/` | Map snapshots (`grid_example.png` = `map_S12.png`, `map_S1.png`, `map_S6.png`) |
 | `REPORT_OUTLINE.md` | Outline for the 5-10 page report |
@@ -440,6 +444,31 @@ includes both walks.
 These numbers are copied from the run of the current code; re-run
 `python run_experiments.py` after any change and update the table from
 `results/summary.csv`.
+
+**Analysis experiments.** Two extra sets on the same fixed settings, seeds
+1-10, run with the commands in section 2 (they do not touch `results/`):
+
+- **Load sweep** (`experiments_sweep.csv` → `results_sweep/`): 20 taxis, 30,
+  60, 90, 120, 150 and 180 passengers, for single rides (none, capacity 1) and
+  detour sharing with capacity 2 and 4.
+- **Fleet equivalence** (`experiments_fleet.csv` → `results_fleet/`): 90
+  passengers; single rides with 10-30 taxis, detour sharing (capacity 4) with
+  6-24 taxis, and the same plus buses with 6-24 taxis (steps of 2).
+
+`plot_analysis.py` draws `results_analysis/sweep.png` and `fleet.png` (mean
+line, ± 1 std band, one line per mode) and writes
+`results_analysis/fleet_equivalence.csv`: per mode, the smallest fleet whose
+mean completed % reaches the S1 level (58.3 %) and 85 %:
+
+| Mode | Fleet for S1 level | Taxi distance | Empty % | Fleet for 85 % | Taxi distance | Empty % |
+|---|---|---|---|---|---|---|
+| none, cap 1 | 20 (58.3 ± 3.3 %) | 2066.9 ± 51.1 | 45.3 ± 2.6 | not reached (81.9 ± 5.4 % with 30) | – | – |
+| detour, cap 4 | 12 (59.8 ± 4.2 %) | 1219.1 ± 23.9 | 24.0 ± 3.3 | 20 (86.3 ± 2.7 %) | 1783.7 ± 81.8 | 20.5 ± 1.2 |
+| detour, cap 4 + buses | 10 (58.7 ± 3.6 %) | 1023.2 ± 26.3 | 25.4 ± 3.5 | 18 (85.3 ± 3.3 %) | 1604.0 ± 82.3 | 22.0 ± 3.0 |
+
+`results_analysis/findings.md` summarises what both sets and S1-S12 show
+(when sharing helps, taxis and driving saved, the waiting / in-vehicle
+trade-off, and the effect of each feature).
 
 ## 9. Assumptions and limitations
 

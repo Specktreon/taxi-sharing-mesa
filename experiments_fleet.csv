@@ -1,0 +1,32 @@
+config_id,description,num_taxis,num_passengers,capacity,sharing_mode,buses
+F_none1_T10,Fleet: single rides; 10 taxis,10,90,1,none,False
+F_none1_T12,Fleet: single rides; 12 taxis,12,90,1,none,False
+F_none1_T14,Fleet: single rides; 14 taxis,14,90,1,none,False
+F_none1_T16,Fleet: single rides; 16 taxis,16,90,1,none,False
+F_none1_T18,Fleet: single rides; 18 taxis,18,90,1,none,False
+F_none1_T20,Fleet: single rides; 20 taxis,20,90,1,none,False
+F_none1_T22,Fleet: single rides; 22 taxis,22,90,1,none,False
+F_none1_T24,Fleet: single rides; 24 taxis,24,90,1,none,False
+F_none1_T26,Fleet: single rides; 26 taxis,26,90,1,none,False
+F_none1_T28,Fleet: single rides; 28 taxis,28,90,1,none,False
+F_none1_T30,Fleet: single rides; 30 taxis,30,90,1,none,False
+F_det4_T6,"Fleet: detour sharing, capacity 4; 6 taxis",6,90,4,detour,False
+F_det4_T8,"Fleet: detour sharing, capacity 4; 8 taxis",8,90,4,detour,False
+F_det4_T10,"Fleet: detour sharing, capacity 4; 10 taxis",10,90,4,detour,False
+F_det4_T12,"Fleet: detour sharing, capacity 4; 12 taxis",12,90,4,detour,False
+F_det4_T14,"Fleet: detour sharing, capacity 4; 14 taxis",14,90,4,detour,False
+F_det4_T16,"Fleet: detour sharing, capacity 4; 16 taxis",16,90,4,detour,False
+F_det4_T18,"Fleet: detour sharing, capacity 4; 18 taxis",18,90,4,detour,False
+F_det4_T20,"Fleet: detour sharing, capacity 4; 20 taxis",20,90,4,detour,False
+F_det4_T22,"Fleet: detour sharing, capacity 4; 22 taxis",22,90,4,detour,False
+F_det4_T24,"Fleet: detour sharing, capacity 4; 24 taxis",24,90,4,detour,False
+F_det4bus_T6,"Fleet: detour sharing, capacity 4 + buses; 6 taxis",6,90,4,detour,True
+F_det4bus_T8,"Fleet: detour sharing, capacity 4 + buses; 8 taxis",8,90,4,detour,True
+F_det4bus_T10,"Fleet: detour sharing, capacity 4 + buses; 10 taxis",10,90,4,detour,True
+F_det4bus_T12,"Fleet: detour sharing, capacity 4 + buses; 12 taxis",12,90,4,detour,True
+F_det4bus_T14,"Fleet: detour sharing, capacity 4 + buses; 14 taxis",14,90,4,detour,True
+F_det4bus_T16,"Fleet: detour sharing, capacity 4 + buses; 16 taxis",16,90,4,detour,True
+F_det4bus_T18,"Fleet: detour sharing, capacity 4 + buses; 18 taxis",18,90,4,detour,True
+F_det4bus_T20,"Fleet: detour sharing, capacity 4 + buses; 20 taxis",20,90,4,detour,True
+F_det4bus_T22,"Fleet: detour sharing, capacity 4 + buses; 22 taxis",22,90,4,detour,True
+F_det4bus_T24,"Fleet: detour sharing, capacity 4 + buses; 24 taxis",24,90,4,detour,True

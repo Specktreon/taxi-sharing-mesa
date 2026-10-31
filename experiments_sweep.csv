@@ -1,0 +1,19 @@
+config_id,description,num_taxis,num_passengers,capacity,sharing_mode,buses
+L_none1_P30,Load sweep: single rides; 30 passengers,20,30,1,none,False
+L_none1_P60,Load sweep: single rides; 60 passengers,20,60,1,none,False
+L_none1_P90,Load sweep: single rides; 90 passengers,20,90,1,none,False
+L_none1_P120,Load sweep: single rides; 120 passengers,20,120,1,none,False
+L_none1_P150,Load sweep: single rides; 150 passengers,20,150,1,none,False
+L_none1_P180,Load sweep: single rides; 180 passengers,20,180,1,none,False
+L_det2_P30,"Load sweep: detour sharing, capacity 2; 30 passengers",20,30,2,detour,False
+L_det2_P60,"Load sweep: detour sharing, capacity 2; 60 passengers",20,60,2,detour,False
+L_det2_P90,"Load sweep: detour sharing, capacity 2; 90 passengers",20,90,2,detour,False
+L_det2_P120,"Load sweep: detour sharing, capacity 2; 120 passengers",20,120,2,detour,False
+L_det2_P150,"Load sweep: detour sharing, capacity 2; 150 passengers",20,150,2,detour,False
+L_det2_P180,"Load sweep: detour sharing, capacity 2; 180 passengers",20,180,2,detour,False
+L_det4_P30,"Load sweep: detour sharing, capacity 4; 30 passengers",20,30,4,detour,False
+L_det4_P60,"Load sweep: detour sharing, capacity 4; 60 passengers",20,60,4,detour,False
+L_det4_P90,"Load sweep: detour sharing, capacity 4; 90 passengers",20,90,4,detour,False
+L_det4_P120,"Load sweep: detour sharing, capacity 4; 120 passengers",20,120,4,detour,False
+L_det4_P150,"Load sweep: detour sharing, capacity 4; 150 passengers",20,150,4,detour,False
+L_det4_P180,"Load sweep: detour sharing, capacity 4; 180 passengers",20,180,4,detour,False

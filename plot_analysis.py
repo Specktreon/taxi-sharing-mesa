@@ -1,0 +1,139 @@
+"""Line charts and the fleet-equivalence table for the analysis experiments.
+
+Usage (after running the two experiment sets):
+    python run_experiments.py --config experiments_sweep.csv --out results_sweep --no-charts
+    python run_experiments.py --config experiments_fleet.csv --out results_fleet --no-charts
+    python plot_analysis.py
+
+Reads results_sweep/summary.csv, results_fleet/summary.csv and (for the S1
+reference level) results/summary.csv. Writes to results_analysis/:
+    sweep.png              load sweep (x = passengers), mean line + std band
+    fleet.png              fleet sizes (x = taxis), with S1 and 85 % lines
+    fleet_equivalence.csv  per mode: smallest fleet reaching the S1 level / 85 %
+"""
+
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from run_experiments import SUMMARY_METRICS
+
+OUT = Path("results_analysis")
+TARGET_PCT = 85.0
+
+# One line per mode: (label, colour, line style).
+MODES = {
+    ("none", 1, False): ("single rides (none, cap 1)", "#2a78d6", "-"),
+    ("detour", 2, False): ("detour sharing, cap 2", "#1baf7a", "--"),
+    ("detour", 4, False): ("detour sharing, cap 4", "#0b6e4f", "-"),
+    ("detour", 4, True): ("detour sharing, cap 4 + buses", "#d81b60", "-"),
+}
+SWEEP_METRICS = ["completed_pct", "avg_wait_completed", "avg_total_completed",
+                 "avg_extra_delay_completed", "distance_per_completed",
+                 "empty_distance_pct"]
+
+
+def mode_key(row):
+    return (row["sharing_mode"], int(row["capacity"]), bool(row["buses"]))
+
+
+def by_mode(summary, x):
+    """{mode key: rows sorted by x}."""
+    summary = summary.assign(_mode=[mode_key(r) for _, r in summary.iterrows()])
+    return {key: group.sort_values(x) for key, group in summary.groupby("_mode",
+                                                                        sort=False)}
+
+
+def line_panel(ax, groups, x, metric, xlabel):
+    for key, rows in groups.items():
+        label, color, style = MODES[key]
+        mean, std = rows[f"{metric}_mean"], rows[f"{metric}_std"]
+        ax.plot(rows[x], mean, style, color=color, linewidth=1.8, marker="o",
+                markersize=3.5, label=label)
+        ax.fill_between(rows[x], mean - std, mean + std, color=color, alpha=0.15,
+                        linewidth=0)
+    ax.set_title(SUMMARY_METRICS[metric], fontsize=10)
+    ax.set_xlabel(xlabel, fontsize=9)
+    ax.grid(color="#e6e5e0", linewidth=0.6)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.tick_params(labelsize=8)
+
+
+def s1_level():
+    s = pd.read_csv("results/summary.csv").set_index("config_id")
+    return s.loc["S1", "completed_pct_mean"]
+
+
+def plot_sweep(sweep):
+    groups = by_mode(sweep, "num_passengers")
+    fig, axes = plt.subplots(2, 3, figsize=(15, 8.5))
+    for ax, metric in zip(axes.flat, SWEEP_METRICS):
+        line_panel(ax, groups, "num_passengers", metric, "passengers (20 taxis)")
+    axes.flat[0].legend(fontsize=8, frameon=False)
+    fig.suptitle("Load sweep on the 30x30 base: 20 taxis, 30-180 passengers "
+                 "(lines: mean over seeds 1-10; bands: ± 1 std)", fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(OUT / "sweep.png", dpi=150)
+    plt.close(fig)
+
+
+def plot_fleet(fleet, reference):
+    groups = by_mode(fleet, "num_taxis")
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8))
+    line_panel(axes[0], groups, "num_taxis", "completed_pct", "taxis (90 passengers)")
+    for level, text in ((reference, f"S1 (none, 20 taxis): {reference:.1f} %"),
+                        (TARGET_PCT, f"{TARGET_PCT:.0f} %")):
+        axes[0].axhline(level, color="#52514e", linewidth=0.9, linestyle=":")
+        axes[0].text(axes[0].get_xlim()[1], level, f" {text}", fontsize=7.5,
+                     va="bottom", ha="right", color="#52514e")
+    line_panel(axes[1], groups, "num_taxis", "total_distance", "taxis (90 passengers)")
+    axes[0].legend(fontsize=8, frameon=False, loc="lower right")
+    fig.suptitle("Fleet size for the same service (90 passengers; mean over seeds "
+                 "1-10, bands ± 1 std)", fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.savefig(OUT / "fleet.png", dpi=150)
+    plt.close(fig)
+
+
+def fleet_equivalence(fleet, reference):
+    """Per mode, the smallest fleet whose mean completed % reaches the S1 level
+    and TARGET_PCT, with its taxi distance and empty share."""
+    rows = []
+    for key, group in by_mode(fleet, "num_taxis").items():
+        for target_name, level in (("S1 level", reference), ("85 %", TARGET_PCT)):
+            hit = group[group["completed_pct_mean"] >= level]
+            row = {"mode": MODES[key][0], "target": target_name,
+                   "target_pct": round(level, 1)}
+            if hit.empty:
+                row["num_taxis"] = None
+            else:
+                best = hit.iloc[0]
+                row["num_taxis"] = int(best["num_taxis"])
+                for metric in ("completed_pct", "total_distance", "empty_distance_pct",
+                               "distance_per_completed"):
+                    row[f"{metric}_mean"] = best[f"{metric}_mean"]
+                    row[f"{metric}_std"] = best[f"{metric}_std"]
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def main():
+    OUT.mkdir(exist_ok=True)
+    sweep = pd.read_csv("results_sweep/summary.csv")
+    fleet = pd.read_csv("results_fleet/summary.csv")
+    reference = s1_level()
+    plot_sweep(sweep)
+    plot_fleet(fleet, reference)
+    table = fleet_equivalence(fleet, reference)
+    table.to_csv(OUT / "fleet_equivalence.csv", index=False)
+    pd.set_option("display.width", 200)
+    print(table.round(1).to_string(index=False))
+    print(f"\nCharts and table written to {OUT.resolve()}")
+
+
+if __name__ == "__main__":
+    main()
