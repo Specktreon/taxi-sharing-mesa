@@ -1,0 +1,432 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><title>Taxi sharing in the city</title><style>
+@page { size: A4; margin: 2cm; }
+html { font-size: 10.5pt; }
+body { font-family: "Times New Roman", Georgia, serif; line-height: 1.32;
+       color: #111; margin: 0; }
+.titleblock { text-align: center; margin-bottom: 0.6em; }
+.titleblock h1 { font-size: 17pt; margin: 0 0 0.25em 0; }
+.titleblock p { margin: 0.1em 0; }
+.authors { font-size: 12pt; }
+.meta { font-size: 9.5pt; color: #333; }
+h2 { font-size: 12.5pt; margin: 0.9em 0 0.3em 0; break-after: avoid; }
+p { margin: 0.35em 0; text-align: justify; hyphens: auto; }
+ul { margin: 0.3em 0; padding-left: 1.3em; }
+li { margin: 0.15em 0; text-align: justify; }
+table { border-collapse: collapse; width: 100%; font-size: 7.8pt; margin: 0.3em 0 0.6em 0;
+        break-inside: avoid; }
+/* numeric tables only: long text cells elsewhere must wrap, or Chrome shrinks
+   every page to fit the widest table */
+.num td { white-space: nowrap; }
+th, td { border-bottom: 0.5pt solid #bbb; padding: 1.5pt 3pt; text-align: left;
+         vertical-align: top; }
+th { border-bottom: 0.9pt solid #333; font-weight: bold; }
+figure { margin: 0.5em 0 0.7em 0; text-align: center; break-inside: avoid; }
+.keep { break-inside: avoid; }
+figure img { max-width: 100%; }
+figcaption { font-size: 9pt; color: #222; margin-top: 0.2em; text-align: center; }
+code { font-family: Consolas, monospace; font-size: 9pt; }
+</style></head><body><div class="titleblock">
+<h1>Taxi sharing in the city: a multi-agent simulation with Mesa</h1>
+<p class="authors">Ridha LEZZAR and King Korter</p>
+<p class="meta">Foundations of Agent-based Systems — M1 DKAI, Université Paris-Saclay — teacher: Nicolas Sabouret — 31 October 2026</p>
+</div>
+
+<p><strong>Abstract.</strong> We model a city of 30x30 districts in which passengers call taxis through a Contract-Net-like auction and taxis may share rides under a fixed 10-minute extra-delay limit. Following the incremental method of the course, sharing is built in four stages (single rides, sharing on the planned route, sharing with detours for 2 and for 4 seats) and then extended with walking, buses, congestion and passenger patience. Over 10 seeds, detour sharing serves 86.3 ± 2.7 % of passengers against 58.3 ± 3.3 % for single rides with the same 20 taxis, halves the waiting time, and gives the same service as single rides with 12 instead of 20 taxis and 41.0 % less driving. Buses relieve the taxis but, at this demand, increase the total vehicle distance.</p>
+<h2>1. Introduction</h2>
+<p>Taxis in a city drive many kilometres empty, on the way to their next passenger. Ride sharing lets one taxi carry several passengers whose trips overlap, which can serve more people with fewer vehicles, at the price of detours for those already on board. Our research question is: <strong>how does taxi sharing affect the number of passengers served, passenger waiting times, journey times, and taxi distance travelled under different simulation configurations?</strong> An agent-based model fits this question: each taxi decides locally whether it can take a passenger, each passenger chooses among offers, and the outcome (who is served, how long they wait, how much is driven) emerges from these local decisions and the messages between agents.</p>
+<h2>2. Model design</h2>
+<p><strong>Environment.</strong> The city is a Mesa <code>MultiGrid</code> of 30x30 cells; each cell is a district and several agents can share a cell. A grid is the simplest space in which distances, routes and congestion have a clear meaning, and 30x30 is large enough that trips vary (1 to 58 districts) while a run stays fast. One simulation step is one minute, so every duration (driving, boarding, waiting, walking) is a whole number of steps and estimates can be exact. A run lasts 120 minutes; passengers appear uniformly during the first 90 minutes, which leaves 30 minutes to finish late trips. Taxis drive the shortest Manhattan path, always <strong>x first, then y</strong>: this deterministic route makes plans reproducible and lets a taxi know exactly which cells it will pass, which the second sharing stage needs.</p>
+<p><strong>Agents.</strong> <code>TaxiAgent</code>, <code>PassengerAgent</code> and (with buses) <code>BusAgent</code> subclass <code>mesa.Agent</code>. A taxi holds its position, capacity, passengers on board, an ordered list of stops (pickup or drop-off of a passenger), the pickup times it has promised, and its state (Figure 1). A passenger holds its origin, destination, request minute, status (waiting, assigned, travelling, completed, not completed, abandoned) and the times needed for the metrics.</p>
+<figure><img src="figures/taxi_states.png" style="width:78%"><figcaption>Figure 1 — Taxi states. A taxi becomes busy when a CONFIRM adds stops; the state always follows the kind of its next stop. Standing at a stop takes the boarding time (1 minute).</figcaption></figure>
+
+<p><strong>Interaction protocol.</strong> Mesa schedules agents but has no messaging, so we wrote a small <code>Message</code> class (sender, receiver, type, data, minute) delivered by <code>TaxiModel.send()</code> into the receiver's inbox. Assignment follows the Contract Net Protocol (Figure 2): a waiting passenger broadcasts a <strong>REQUEST</strong> (call for proposals); every taxi answers <strong>PROPOSE</strong> with whether it can accept and its estimated pickup time; the passenger sends <strong>ACCEPT</strong> to the earliest offer; the taxi re-checks its plan, since it may have accepted someone else in the same minute, and answers <strong>CONFIRM</strong> (with the promised pickup minute) or <strong>REJECT</strong>, after which the passenger asks again the next minute. We chose this protocol because it keeps decisions local (no central dispatcher), it is the classic agent negotiation scheme of the course, and its message count is a measurable cost.</p>
+<figure><img src="figures/sequence.png" style="width:78%"><figcaption>Figure 2 — One auction round (one minute) between a passenger and two taxis.</figcaption></figure>
+
+<p><strong>Step phases.</strong> Each step runs fixed phases with Mesa's <code>AgentSet.do()</code> on <code>model.agents_by_type</code>: (0) new passengers are created; (1) waiting passengers send REQUEST; (2) taxis PROPOSE; (3) passengers ACCEPT; (4) taxis CONFIRM or REJECT; (5) passengers read replies and walk if needed; (6) taxis, then buses, drive one minute or stand at a stop; (7) the clock advances, impatient passengers abandon, and at minute 120 every unfinished passenger becomes <em>not completed</em>. Phases make the order of decisions explicit and the runs deterministic for a given seed.</p>
+<h2>3. Sharing rules, built in four stages</h2>
+<p>As asked, sharing was built incrementally; each stage is a value of the <code>sharing_mode</code> parameter and is kept in the final model so that the stages can be compared (scenarios S1-S4):</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Mode, capacity</th>
+<th>Rule</th>
+<th>Why this step</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>none</code>, 1</td>
+<td>only an idle taxi accepts; one passenger at a time</td>
+<td>baseline without sharing</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>no_detour</code>, 2</td>
+<td>a busy taxi also accepts if the new pickup and destination lie, in order, on its planned route</td>
+<td>sharing without any detour</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>detour</code>, 2</td>
+<td>general insertion of the new pickup and drop-off into the stop list</td>
+<td>route changes allowed</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>detour</code>, 4</td>
+<td>the same with up to 4 passengers</td>
+<td>several passengers</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Insertion search.</strong> For a new passenger the taxi tries every pair of positions (i ≤ j) of its stop list for the pickup and the drop-off, keeping existing stops in order, and keeps the feasible plan with the earliest pickup, then the earliest finish. With n stops there are (n+1)(n+2)/2 plans, each checked in O(n). We do not reorder existing stops: it keeps the search small, and it keeps the promises made to passengers already booked.</p>
+<p><strong>Acceptability.</strong> A plan is feasible only if capacity is never exceeded, every drop-off follows its pickup, and <strong>every</strong> passenger on board or booked keeps an <em>extra delay</em> (in-vehicle time minus its direct solo trip time) of at most <strong>10 minutes</strong>. The limit is fixed in every experiment so that results stay comparable: it is the passengers' guarantee, not a parameter we tune. A second rule, the <strong>promise rule</strong>, forbids moving an assigned passenger's pickup more than 10 minutes past the minute promised in its CONFIRM, counted from the original promise so that several insertions cannot add up. Planning uses exactly the costs of the movement (district costs along the x-first path plus boarding), so estimates equal actual times and the limits hold in the simulation, not only in the plan.</p>
+<p><strong>Other choices.</strong> Each pickup and drop-off takes a <strong>boarding time</strong> of 1 minute: without it, extra stops would be free and sharing would look better than it is. A taxi takes on at most <strong>2 x capacity</strong> passengers at a time (on board plus booked): without this booking limit one taxi could queue many passengers far in the future and the search would grow quickly. Assignment is greedy, one auction per minute, with no reassignment after CONFIRM: simple, decentralised and deterministic.</p>
+<h2>4. Extensions</h2>
+<p>Each extension is an on/off feature, so its effect can be isolated (S5-S12); each is deliberately simple. Table 1 summarises all design choices.</p>
+<ul>
+<li><strong>Walking.</strong> A taxi may also offer a pickup in a district adjacent to the origin, if the passenger (3 minutes per district) gets there before the taxi, so no taxi ever waits for a walker. Ties go to not walking. The walk counts in the waiting time but not in the extra delay (it is the passenger's choice).</li>
+<li><strong>Buses.</strong> Three horizontal and three vertical lines (rows and columns 7, 15 and 22), stops every 3 districts, 2 buses per line with 10 seats, driving back and forth at taxi speed. A passenger takes the bus, once and for good, if its trip is at least 6 districts long and one line has stops within 3 districts of both ends; otherwise it calls a taxi. No transfers. This is a fixed mode-choice rule, not a cost-based choice.</li>
+<li><strong>Congestion.</strong> The central 10x10 districts cost 3 minutes to enter, the ring around them 2, other districts 1; costs stay whole minutes. Taxis and buses are slowed, routes do not avoid congestion, and planning uses the same costs, so estimates stay exact.</li>
+<li><strong>Patience.</strong> Each passenger draws a patience of 10-30 minutes (from its own random generator, so demand is unchanged), ignores offers whose pickup would come later, and abandons if still unconfirmed when its patience runs out. A confirmed passenger never abandons.</li>
+</ul>
+<div class="keep">
+<p><strong>Table 1</strong> — Design choices at a glance.</p>
+<table>
+<thead>
+<tr>
+<th>Choice</th>
+<th>Why</th>
+<th>Simplification accepted</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cell = district, 30x30 <code>MultiGrid</code></td>
+<td>distances and zones are well defined; trips of very different lengths</td>
+<td>no road network</td>
+</tr>
+<tr>
+<td>1 step = 1 minute, integer costs</td>
+<td>every duration is a whole number of steps, so plans can be exact</td>
+<td>speeds and dwell times are multiples of a minute</td>
+</tr>
+<tr>
+<td>x-first Manhattan route</td>
+<td>deterministic, shortest, known cell by cell (needed by stage 2)</td>
+<td>routes never avoid congestion</td>
+</tr>
+<tr>
+<td>Contract Net (REQUEST ... CONFIRM) with our <code>Message</code> class</td>
+<td>local decisions, no central dispatcher, measurable communication cost</td>
+<td>one greedy round per minute, no reassignment</td>
+</tr>
+<tr>
+<td>Insertion without reordering</td>
+<td>small search; earlier promises are kept</td>
+<td>can miss better plans that reorder stops</td>
+</tr>
+<tr>
+<td>Fixed 10-minute extra-delay limit + promise rule</td>
+<td>a guarantee for every passenger, the same in every run</td>
+<td>one limit for everyone</td>
+</tr>
+<tr>
+<td>Booking limit 2 x capacity</td>
+<td>keeps stop lists and the search small</td>
+<td>a practical bound, not a modelling result</td>
+</tr>
+<tr>
+<td>1-minute boarding at every stop</td>
+<td>extra stops must cost something</td>
+<td>the same time for everyone</td>
+</tr>
+<tr>
+<td>Separate seeded generators (demand, fleet, patience)</td>
+<td>every scenario sees the same passengers: paired comparisons</td>
+<td>one demand pattern per seed</td>
+</tr>
+<tr>
+<td>One <code>metrics.py</code> for model, dashboard and experiments</td>
+<td>the numbers shown and the numbers reported are the same</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Features as on/off switches</td>
+<td>each effect can be isolated against S1 or S4</td>
+<td>each feature is deliberately minimal</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2>5. Implementation and verification</h2>
+<p>The model uses Mesa 3.5.1 throughout: <code>mesa.Agent</code> subclasses, a <code>MultiGrid</code>, <code>AgentSet.do</code> phases, a <code>DataCollector</code> (model metrics and one row per passenger), <code>batch_run</code> for the experiments and a <code>SolaraViz</code> dashboard (Figure 3). The code is split by concern: <code>config.py</code> (fixed settings), <code>messages.py</code>, <code>routing.py</code> (paths, congestion), <code>agents.py</code> (taxi and passenger behaviour), <code>buses.py</code>, <code>model.py</code> (phases, demand, deadline), <code>metrics.py</code> (one definition used by the model, the dashboard and the experiments), <code>app.py</code> (dashboard) and <code>run_experiments.py</code> (scenarios from a CSV file, results and charts).</p>
+<p>The <strong>149 pytest tests</strong> check: hand-computed scenarios (pickup and arrival minutes of single and shared trips, accepted and rejected insertions, the promise rule); invariants after every step of random runs in every mode (capacity, drop-off after pickup, extra delay and promise slips at most 10 minutes, consistent status counts, bus capacity, walkers present when picked up); exact estimates under congestion; that every feature switched off reproduces the stored S1-S4 results exactly; and the dashboard drawing for all 16 feature combinations.</p>
+<h2>6. Experimental setup</h2>
+<p>All runs use the fixed settings of Section 2 (30x30, 120 minutes, arrivals over 90 minutes, 1 minute per district, 1 minute of boarding, extra-delay limit 10 minutes). The base fleet and demand, <strong>20 taxis and 90 passengers</strong>, were calibrated by trying several combinations so that single rides serve a medium share of passengers (S1: 58.3 ± 3.3 %), leaving room to see both gains and losses. The 12 scenarios are: S1-S4 the four sharing stages; S5, S6, S8, S10 add walking, buses, congestion and patience to S4; S7, S9, S11 add buses, congestion and patience to S1; S12 has all four. Each runs with seeds 1-10; demand and taxi start cells depend only on the seed, so every scenario sees exactly the same passengers. Two further sets vary the load (20 taxis, 30 to 180 passengers) and the fleet (90 passengers, 6 to 30 taxis). We report mean ± standard deviation over the 10 seeds.</p>
+<figure><img src="figures/map_S12.png" style="width:90%"><figcaption>Figure 3 — Dashboard map of S12 (all four features) at minute 40, seed 1 (as <code>docs/map_S12.png</code>, drawn at page size): taxis by state with "on board / seats", planned routes and stops, bus lines and buses, passengers, congestion zones.</figcaption></figure>
+
+<h2>7. Results</h2>
+<div class="keep num">
+<p><strong>Table 2</strong> — Scenarios S1-S12 (mean ± std, seeds 1-10). Times are over completed passengers; extra delay over taxi passengers; distance in districts.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Features</th>
+<th>Completed %</th>
+<th>Wait (min)</th>
+<th>Total time (min)</th>
+<th>Extra delay (min)</th>
+<th>Taxi dist. / completed</th>
+<th>Empty %</th>
+<th>Bus %</th>
+<th>Acceptable %</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S1</td>
+<td>none, cap 1</td>
+<td>58.3 ± 3.3</td>
+<td>21.6 ± 3.3</td>
+<td>42.5 ± 3.7</td>
+<td>0.0 ± 0.0</td>
+<td>39.5 ± 2.1</td>
+<td>45.3 ± 2.6</td>
+<td>0.0 ± 0.0</td>
+<td>58.3 ± 3.3</td>
+</tr>
+<tr>
+<td>S2</td>
+<td>no_detour, cap 2</td>
+<td>58.1 ± 2.9</td>
+<td>21.2 ± 3.1</td>
+<td>42.1 ± 3.4</td>
+<td>0.0 ± 0.0</td>
+<td>39.6 ± 2.0</td>
+<td>45.7 ± 2.9</td>
+<td>0.0 ± 0.0</td>
+<td>58.1 ± 2.9</td>
+</tr>
+<tr>
+<td>S3</td>
+<td>detour, cap 2</td>
+<td>84.0 ± 3.1</td>
+<td>10.6 ± 1.7</td>
+<td>35.2 ± 2.6</td>
+<td>3.6 ± 0.4</td>
+<td>24.1 ± 1.2</td>
+<td>20.8 ± 1.9</td>
+<td>0.0 ± 0.0</td>
+<td>84.0 ± 3.1</td>
+</tr>
+<tr>
+<td>S4</td>
+<td>detour, cap 4</td>
+<td>86.3 ± 2.7</td>
+<td>10.0 ± 1.4</td>
+<td>34.8 ± 2.3</td>
+<td>3.9 ± 0.2</td>
+<td>23.0 ± 0.8</td>
+<td>20.5 ± 1.2</td>
+<td>0.0 ± 0.0</td>
+<td>86.3 ± 2.7</td>
+</tr>
+<tr>
+<td>S5</td>
+<td>S4 + walking</td>
+<td>88.7 ± 4.9</td>
+<td>8.7 ± 1.1</td>
+<td>33.6 ± 2.0</td>
+<td>4.0 ± 0.3</td>
+<td>21.9 ± 1.1</td>
+<td>17.6 ± 1.9</td>
+<td>0.0 ± 0.0</td>
+<td>88.7 ± 4.9</td>
+</tr>
+<tr>
+<td>S6</td>
+<td>S4 + buses</td>
+<td>88.1 ± 2.9</td>
+<td>10.4 ± 1.3</td>
+<td>35.1 ± 2.0</td>
+<td>3.4 ± 0.4</td>
+<td>20.6 ± 1.3</td>
+<td>20.3 ± 2.3</td>
+<td>15.8 ± 3.7</td>
+<td>88.1 ± 2.9</td>
+</tr>
+<tr>
+<td>S7</td>
+<td>S1 + buses</td>
+<td>67.7 ± 5.0</td>
+<td>18.6 ± 2.9</td>
+<td>40.5 ± 3.4</td>
+<td>0.0 ± 0.0</td>
+<td>33.4 ± 2.9</td>
+<td>44.8 ± 2.2</td>
+<td>15.8 ± 3.7</td>
+<td>67.7 ± 5.0</td>
+</tr>
+<tr>
+<td>S8</td>
+<td>S4 + congestion</td>
+<td>69.4 ± 5.0</td>
+<td>12.4 ± 1.4</td>
+<td>42.6 ± 2.5</td>
+<td>2.8 ± 0.6</td>
+<td>25.7 ± 1.9</td>
+<td>21.9 ± 2.7</td>
+<td>0.0 ± 0.0</td>
+<td>69.4 ± 5.0</td>
+</tr>
+<tr>
+<td>S9</td>
+<td>S1 + congestion</td>
+<td>40.8 ± 2.4</td>
+<td>22.4 ± 2.9</td>
+<td>49.6 ± 4.1</td>
+<td>0.0 ± 0.0</td>
+<td>42.3 ± 3.2</td>
+<td>47.8 ± 2.2</td>
+<td>0.0 ± 0.0</td>
+<td>40.8 ± 2.4</td>
+</tr>
+<tr>
+<td>S10</td>
+<td>S4 + patience</td>
+<td>81.0 ± 3.9</td>
+<td>8.1 ± 0.8</td>
+<td>33.2 ± 1.5</td>
+<td>3.8 ± 0.3</td>
+<td>22.9 ± 1.3</td>
+<td>18.4 ± 1.3</td>
+<td>0.0 ± 0.0</td>
+<td>78.1 ± 3.1</td>
+</tr>
+<tr>
+<td>S11</td>
+<td>S1 + patience</td>
+<td>66.8 ± 3.8</td>
+<td>12.6 ± 1.0</td>
+<td>33.6 ± 1.9</td>
+<td>0.0 ± 0.0</td>
+<td>31.0 ± 1.9</td>
+<td>31.8 ± 2.5</td>
+<td>0.0 ± 0.0</td>
+<td>66.8 ± 3.8</td>
+</tr>
+<tr>
+<td>S12</td>
+<td>S4 + all four</td>
+<td>75.8 ± 5.4</td>
+<td>10.0 ± 1.2</td>
+<td>40.3 ± 1.5</td>
+<td>2.8 ± 0.4</td>
+<td>19.9 ± 1.7</td>
+<td>17.0 ± 2.3</td>
+<td>15.8 ± 3.7</td>
+<td>73.8 ± 5.1</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figure><img src="figures/comparison.png" style="width:90%"><figcaption>Figure 4 — S1-S12 compared (results/charts/comparison.png laid out for the page; mean over seeds 1-10, error bars ± 1 std). Colour and hatching give the sharing mode, the tag under each id the features switched on.</figcaption></figure>
+
+<div class="keep num">
+<p><strong>Table 3</strong> — Smallest fleet reaching the S1 level (58.3 %) or 85 % completed, with 90 passengers. Vehicle distance = taxi + bus districts, summed per run. Single rides never reach 85 %: their row shows the largest fleet tried (30 taxis).</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Target</th>
+<th>Taxis</th>
+<th>Completed %</th>
+<th>Taxi distance</th>
+<th>Bus distance</th>
+<th>Vehicle distance</th>
+<th>Empty taxi %</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>none, cap 1</td>
+<td>S1 level</td>
+<td>20</td>
+<td>58.3 ± 3.3</td>
+<td>2066.9 ± 51.1</td>
+<td>0</td>
+<td>2066.9 ± 51.1</td>
+<td>45.3 ± 2.6</td>
+</tr>
+<tr>
+<td>detour, cap 4</td>
+<td>S1 level</td>
+<td>12</td>
+<td>59.8 ± 4.2</td>
+<td>1219.1 ± 23.9</td>
+<td>0</td>
+<td>1219.1 ± 23.9</td>
+<td>24.0 ± 3.3</td>
+</tr>
+<tr>
+<td>detour, cap 4 + buses</td>
+<td>S1 level</td>
+<td>10</td>
+<td>58.7 ± 3.6</td>
+<td>1023.2 ± 26.3</td>
+<td>1413.6 ± 5.5</td>
+<td>2436.8 ± 27.7</td>
+<td>25.4 ± 3.5</td>
+</tr>
+<tr>
+<td>none, cap 1</td>
+<td>85 %</td>
+<td>not reached (30)</td>
+<td>81.9 ± 5.4</td>
+<td>2666.8 ± 143.6</td>
+<td>0</td>
+<td>2666.8 ± 143.6</td>
+<td>39.6 ± 3.8</td>
+</tr>
+<tr>
+<td>detour, cap 4</td>
+<td>85 %</td>
+<td>20</td>
+<td>86.3 ± 2.7</td>
+<td>1783.7 ± 81.8</td>
+<td>0</td>
+<td>1783.7 ± 81.8</td>
+<td>20.5 ± 1.2</td>
+</tr>
+<tr>
+<td>detour, cap 4 + buses</td>
+<td>85 %</td>
+<td>18</td>
+<td>85.3 ± 3.3</td>
+<td>1604.0 ± 82.3</td>
+<td>1413.6 ± 5.5</td>
+<td>3017.6 ± 84.4</td>
+<td>22.0 ± 3.0</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figure><img src="figures/sweep.png" style="width:80%"><figcaption>Figure 5 — Load sweep with 20 taxis (results_analysis/sweep.png laid out for the page): single rides vs detour sharing with 2 and 4 seats (line: mean over seeds 1-10; band: ± 1 std).</figcaption></figure>
+
+<figure><img src="figures/fleet.png" style="width:86%"><figcaption>Figure 6 — Completed % and distance driven against fleet size, 90 passengers (results_analysis/fleet.png laid out for the page). Solid lines: taxi distance; dashed line: taxi + bus distance of the bus mode.</figcaption></figure>
+
+<h2>8. Discussion</h2>
+<p><strong>Number served and traffic.</strong> Detour sharing is the decisive step: with the same 20 taxis it serves 86.3 ± 2.7 % of passengers against 58.3 ± 3.3 % for single rides (Table 2, Figure 4). The gain is largest at medium to high load and vanishes at low load: with 30 passengers both serve almost everyone (93.7 ± 2.3 % and 93.7 ± 3.1 %, Figure 5). Seen from the fleet side (Table 3, Figure 6), sharing gives the S1 level of service with 12 taxis instead of 20, cutting driving from 2066.9 ± 51.1 to 1219.1 ± 23.9 districts (-41.0 %) and the empty share from 45.3 ± 2.6 % to 24.0 ± 3.3 %; 85 % is reached with 20 shared taxis but not with 30 unshared ones. Capacity 4 adds little over 2 (86.3 ± 2.7 % vs 84.0 ± 3.1 %): with 1-minute stops, every extra rider delays the others and the 10-minute limit blocks most third and fourth riders.</p>
+<p><strong>Stage 2 is useless on random trips.</strong> Two random trips rarely lie, in order, on the same x-first route, so <code>no_detour</code> shares 1.5 ± 1.5 rides per run (against 61.4 ± 4.3 for stage 3) and performs like single rides (58.1 ± 2.9 %). Sharing needs detours.</p>
+<p><strong>Travel time: waiting against riding.</strong> At the base load, sharing halves the wait (10.0 ± 1.4 vs 21.6 ± 3.3 min) and lengthens the ride (in-vehicle 24.8 ± 1.1 vs 20.9 ± 0.9 min; extra delay 3.9 ± 0.2), so the whole journey is shorter (34.8 ± 2.3 vs 42.5 ± 3.7 min, with 86.3 ± 2.7 % and 58.3 ± 3.3 % completed). Extra delay grows with load (1.2 ± 0.4 min at 30 passengers, 4.8 ± 0.2 at 180) but stays far below the limit; the largest extra delay ever observed is exactly the 10-minute limit.</p>
+<p><strong>Acceptability and patience.</strong> By construction no passenger suffers more than 10 minutes of extra delay and no promise slips by more than 10 minutes. With patience, 10.8 ± 4.4 % of passengers abandon under sharing (S10: 81.0 ± 3.9 % completed, 78.1 ± 3.1 % acceptable) and 26.7 ± 3.2 % without sharing (S11). Abandoning frees taxis, so single rides even complete more with patience (66.8 ± 3.8 % vs 58.3 ± 3.3 %): impatient passengers stop occupying the fleet.</p>
+<p><strong>The other features.</strong> Walking helps a little (S5: 88.7 ± 4.9 % completed, wait 8.7 ± 1.1 min, empty share 17.6 ± 1.9 %). Congestion is the largest loss (S8: 69.4 ± 5.0 %, S9: 40.8 ± 2.4 %), and sharing keeps more of its service than single rides. Buses take 15.8 ± 3.7 % of passengers and relieve the taxis, most clearly without sharing (S7: 67.7 ± 5.0 % vs 58.3 ± 3.3 %). Bus riders wait longer than taxi riders (19.0 ± 2.6 vs 8.8 ± 1.5 min in S6, the walk to the stop included). <strong>But buses do not reduce driving at this demand.</strong> They drive their full lines carrying only 0.13 ± 0.03 passengers per district: in S6 the taxis drive 1634.9 ± 103.7 districts and the buses 1413.6 ± 5.5, a total of 3048.5 ± 106.8 against 1783.7 ± 81.8 in S4; for the S1 level of service, sharing with buses drives 2436.8 ± 27.7 vehicle districts, more than single rides. A bus is also a bigger vehicle than a car, so bus distance is not comparable to car distance for pollution; our distances are proxies for vehicle movements only.</p>
+<p><strong>Communication cost.</strong> Messages show the price of the decentralised protocol. With sharing, every passenger is confirmed in its first round: S4 sends 3780.0 ± 0.0 messages per run, exactly 90 × (20 REQUEST + 20 PROPOSE + 1 ACCEPT + 1 CONFIRM), i.e. 48.7 ± 1.6 per completed passenger. Without sharing, busy taxis refuse and waiting passengers broadcast again every minute: 1511.7 ± 213.8 messages per completed passenger in S1.</p>
+<h2>9. Limitations and future work</h2>
+<p>The city is an abstract grid without road network or traffic from other vehicles; congestion is a fixed pattern that routes do not avoid. Assignment is a greedy one-round auction without reassignment, insertion never reorders existing stops, and the booking limit is a practical bound. Boarding time is fixed and idle taxis do not reposition. Walking covers one adjacent district; buses have fixed lines, no transfers and a one-shot, threshold-based mode choice; patience applies only before the CONFIRM. Results depend on the chosen city size, fleet and demand, with 10 seeds per scenario. Natural extensions are congestion-aware routing, reordering of stops, repositioning of idle taxis, reassignment, bus transfers and a cost-based choice between bus and taxi.</p>
+<h2>10. Conclusion</h2>
+<p>In our model, sharing with detours is what makes taxi sharing work: it serves far more passengers with the same fleet, or the same passengers with 40 % fewer taxis and 41 % less driving, while passengers trade a shorter wait for a few minutes of extra ride, always within the 10-minute guarantee. Sharing only along the planned route almost never happens on random trips. Buses can take part of the demand off the taxis, but at this demand their own driving outweighs the taxi distance they save.</p></body></html>

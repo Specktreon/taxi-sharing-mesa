@@ -20,6 +20,7 @@ district is not equivalent to a car district (bigger vehicle), so the total is
 a count of vehicle movements, not a pollution measure.
 """
 
+import textwrap
 from pathlib import Path
 
 import matplotlib
@@ -90,22 +91,45 @@ def s1_level():
     return s.loc["S1", "completed_pct_mean"]
 
 
-def plot_sweep(sweep):
+def compact_layout(fig, axes):
+    """Narrow (print) layout: wrapped panel titles, one legend above the panels."""
+    for ax in axes.flat:
+        ax.set_title(textwrap.fill(ax.get_title(), 34), fontsize=9)
+        if ax.get_legend():
+            ax.get_legend().remove()
+    handles, labels = [], []
+    for ax in axes.flat:  # unique entries, in drawing order
+        for h, label in zip(*ax.get_legend_handles_labels()):
+            if label not in labels:
+                handles.append(h)
+                labels.append(label)
+    fig.legend(handles, labels, loc="upper center", ncol=2, frameon=False, fontsize=8)
+
+
+def plot_sweep(sweep, path=OUT / "sweep.png", figsize=(15, 8.5), grid=(2, 3),
+               compact=False, dpi=150):
+    """Load sweep panels. compact=True draws the narrow print version of the
+    same chart (no suptitle, wrapped titles, legend above the panels)."""
     groups = by_mode(sweep, "num_passengers")
-    fig, axes = plt.subplots(2, 3, figsize=(15, 8.5))
+    fig, axes = plt.subplots(*grid, figsize=figsize)
     for ax, metric in zip(axes.flat, SWEEP_METRICS):
         line_panel(ax, groups, "num_passengers", metric, "passengers (20 taxis)")
     axes.flat[0].legend(fontsize=8, frameon=False)
-    fig.suptitle("Load sweep on the 30x30 base: 20 taxis, 30-180 passengers "
-                 "(lines: mean over seeds 1-10; bands: ± 1 std)", fontsize=11)
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(OUT / "sweep.png", dpi=150)
+    if compact:
+        compact_layout(fig, axes)
+        fig.tight_layout(rect=(0, 0, 1, 0.94))
+    else:
+        fig.suptitle("Load sweep on the 30x30 base: 20 taxis, 30-180 passengers "
+                     "(lines: mean over seeds 1-10; bands: ± 1 std)", fontsize=11)
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(path, dpi=dpi)
     plt.close(fig)
 
 
-def plot_fleet(fleet, reference):
+def plot_fleet(fleet, reference, path=OUT / "fleet.png", figsize=(13, 4.8),
+               compact=False, dpi=150):
     groups = by_mode(fleet, "num_taxis")
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8))
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
     line_panel(axes[0], groups, "num_taxis", "completed_pct", "taxis (90 passengers)")
     for level, text in ((reference, f"S1 (none, 20 taxis): {reference:.1f} %"),
                         (TARGET_PCT, f"{TARGET_PCT:.0f} %")):
@@ -127,10 +151,15 @@ def plot_fleet(fleet, reference):
                       fontsize=10)
     axes[1].legend(fontsize=8, frameon=False, loc="lower right")
     axes[0].legend(fontsize=8, frameon=False, loc="lower right")
-    fig.suptitle("Fleet size for the same service (90 passengers; mean over seeds "
-                 "1-10, bands ± 1 std)", fontsize=11)
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
-    fig.savefig(OUT / "fleet.png", dpi=150)
+    if compact:
+        axes[1].set_title("Distance driven (districts)")
+        compact_layout(fig, axes)
+        fig.tight_layout(rect=(0, 0, 1, 0.87))
+    else:
+        fig.suptitle("Fleet size for the same service (90 passengers; mean over "
+                     "seeds 1-10, bands ± 1 std)", fontsize=11)
+        fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.savefig(path, dpi=dpi)
     plt.close(fig)
 
 
