@@ -14,6 +14,12 @@ MINUTES_PER_DISTRICT = 1
 # district this many minutes before driving on (0 = instantaneous stops).
 BOARDING_MINUTES = 1
 
+# Passenger patience (minutes): each passenger draws an integer patience
+# uniformly in [PATIENCE_MIN, PATIENCE_MAX] and abandons if still waiting for a
+# CONFIRM after that long. PATIENCE_MAX = None (or 0) disables abandonment.
+PATIENCE_MIN = 10
+PATIENCE_MAX = None
+
 # Allowed taxi capacities (seats).
 CAPACITIES = (1, 2, 3, 4)
 

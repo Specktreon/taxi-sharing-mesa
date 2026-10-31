@@ -14,7 +14,14 @@ Timing (all in simulated minutes; b = boarding_minutes, at every stop):
 Averages marked "completed" only include passengers who reached their
 destination; the matching count is always reported next to them.
 "wait_censored" includes every created passenger: unserved passengers count
-the time they had waited when the simulation ended (a lower bound).
+the time they had waited when the simulation ended (a lower bound); abandoned
+passengers count the time until they gave up.
+
+Acceptability (optional patience model): a passenger still waiting for a
+CONFIRM after their patience abandons; abandoned passengers are not
+not_completed. acceptable_pct = % of created passengers who completed with
+waiting time <= their patience (any wait when patience is disabled) and extra
+delay <= the model's max_extra_delay (MAX_EXTRA_DELAY_MINUTES).
 
 Distances are counted in districts driven. total = empty + occupied, where
 "empty" means no passenger on board. passenger_distance sums, over passengers,
@@ -25,7 +32,8 @@ are simple proxies for vehicle travel, not measured pollution or congestion.
 
 import math
 
-from agents import ASSIGNED, COMPLETED, NOT_COMPLETED, TRAVELLING, WAITING
+from agents import (ABANDONED, ASSIGNED, COMPLETED, NOT_COMPLETED, TRAVELLING,
+                    WAITING)
 
 MODEL_METRICS = [
     "minute",
@@ -35,7 +43,10 @@ MODEL_METRICS = [
     "travelling",
     "completed",
     "not_completed",
+    "abandoned",
     "completed_pct",
+    "abandoned_pct",
+    "acceptable_pct",
     "avg_wait_completed",
     "avg_in_vehicle_completed",
     "avg_total_completed",
@@ -61,9 +72,11 @@ PASSENGER_REPORTERS = {
     "origin": lambda p: f"{p.origin[0]};{p.origin[1]}",
     "destination": lambda p: f"{p.destination[0]};{p.destination[1]}",
     "request_time": "request_time",
+    "patience": "patience",
     "promised_pickup": "promised_pickup",
     "pickup_time": "pickup_time",
     "arrival_time": "arrival_time",
+    "abandon_time": "abandon_time",
     "status": "status",
     "status_at_deadline": "status_at_deadline",
     "taxi_id": lambda p: None if p.taxi is None else p.taxi.unique_id,
@@ -96,7 +109,16 @@ def compute(model):
     def censored_wait(p):
         if p.pickup_time is not None:
             return p.waiting_time
+        if p.abandon_time is not None:
+            return p.abandon_time - p.request_time
         return model.minute - p.request_time
+
+    acceptable = [
+        p for p in done
+        if (p.patience is None or p.waiting_time <= p.patience)
+        and p.extra_delay <= model.max_extra_delay
+    ]
+    abandoned = status.count(ABANDONED)
 
     return {
         "minute": model.minute,
@@ -106,7 +128,12 @@ def compute(model):
         "travelling": status.count(TRAVELLING),
         "completed": len(done),
         "not_completed": status.count(NOT_COMPLETED),
+        "abandoned": abandoned,
         "completed_pct": 100 * len(done) / created if created else math.nan,
+        "abandoned_pct": 100 * abandoned / created if created else math.nan,
+        "acceptable_pct": (
+            100 * len(acceptable) / created if created else math.nan
+        ),
         "avg_wait_completed": mean(p.waiting_time for p in done),
         "avg_in_vehicle_completed": mean(p.in_vehicle_time for p in done),
         "avg_total_completed": mean(p.total_time for p in done),

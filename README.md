@@ -143,9 +143,22 @@ Step phases:
 6. Each taxi spends the minute either driving one cell towards its next stop,
    or standing still while a passenger boards or alights (`boarding_minutes`
    per stop). Passengers on board move with their taxi.
-7. The clock advances. When `minute == duration`, every passenger who is still
-   waiting, assigned, or travelling becomes **not_completed**, and the model
-   stops.
+7. The clock advances. If patience is enabled, every passenger who is still
+   *waiting* (no CONFIRM yet) and has waited `patience` minutes becomes
+   **abandoned** and leaves the grid. Assigned passengers never abandon.
+   When `minute == duration`, every passenger who is still waiting, assigned,
+   or travelling becomes **not_completed**, and the model stops.
+
+**Patience (optional).** Parameters `patience_min` and `patience_max`
+(minutes). Each passenger draws an integer patience uniformly in
+`[patience_min, patience_max]`. The draw uses its own random generator, seeded
+by the seed, in request-list order. Origins, destinations and request minutes
+are therefore the same with or without patience, and passenger *i* gets the
+same patience in every configuration. `patience_max = None` (the default) or
+`0` disables abandonment, and the model then behaves exactly as without this
+feature. In the UI, set *Patience max* above 0 to enable it. In
+`experiments.csv`, add optional `patience_min` / `patience_max` columns (an
+empty `patience_max` cell disables it for that row).
 
 Messages are delivered by `TaxiModel.send()`, which appends the message to the
 receiver's inbox. Mesa itself has no messaging; nothing else is added on top of
@@ -166,9 +179,11 @@ Mesa's agents and scheduling.
 **Passenger state:**
 
 - origin and destination;
-- request minute, promised pickup minute, actual pickup minute, and arrival
-  minute;
-- status: waiting, assigned, travelling, completed, or not_completed;
+- request minute, promised pickup minute, actual pickup minute, arrival
+  minute, and abandon minute;
+- patience (None when disabled);
+- status: waiting, assigned, travelling, completed, not_completed, or
+  abandoned;
 - individual trip time;
 - whether the ride was shared;
 - districts ridden.
@@ -269,7 +284,17 @@ Other reported values:
   over completed passengers who shared a ride.
 - **Average waiting time including unserved:** every created passenger counts.
   Unserved passengers count the minutes they had waited at the deadline, so
-  this value is a lower bound.
+  this value is a lower bound. Abandoned passengers count the minutes until
+  they gave up.
+- **Abandoned:** `abandoned` passengers gave up waiting for a CONFIRM after
+  their patience; `abandoned_pct` is their share of created passengers. They
+  are not counted in `not_completed`. Both are 0 when patience is disabled.
+- **Acceptable trips:** `acceptable_pct` is the percentage of created
+  passengers who completed with `waiting time <= patience` and
+  `extra delay <= MAX_EXTRA_DELAY_MINUTES`. With patience disabled, any
+  completion meets the waiting condition. A passenger can complete without
+  being acceptable: an assigned passenger never abandons, but may still be
+  picked up after their patience has run out.
 - **Taxi distance (vehicle-km proxy):** districts driven, split into
   `empty_distance` (no passenger on board) and `occupied_distance`.
   `total_distance` is their sum. `empty_distance_pct` is the empty share.
@@ -329,6 +354,11 @@ duration.
 - With `boarding_minutes` > 0, a third or fourth passenger is rarely accepted.
   Every extra stop costs the others time, so the 10-minute limit is reached
   quickly.
+- Patience is a simple acceptability rule: a fixed integer per passenger,
+  drawn uniformly, compared only with the time spent waiting for a CONFIRM.
+  Once confirmed, a passenger trusts the promise and never abandons, however
+  late the pickup. An abandoned passenger does not request again. The
+  experiments in `results/` were run with patience disabled.
 - Idle taxis wait where they are; there is no repositioning.
 - Requests made at or after the deadline are not created.
 - Results depend on the chosen grid size and demand levels. Each configuration

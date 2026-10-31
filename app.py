@@ -16,9 +16,10 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from mesa.visualization import SolaraViz
 
-from agents import ASSIGNED, NOT_COMPLETED, PICKUP, WAITING, stop_district
+from agents import (ABANDONED, ASSIGNED, NOT_COMPLETED, PICKUP, WAITING,
+                    stop_district)
 from config import (ARRIVAL_MODES, BOARDING_MINUTES, CAPACITIES, DEFAULTS,
-                    MAX_EXTRA_DELAY_MINUTES, SHARING_MODES)
+                    MAX_EXTRA_DELAY_MINUTES, PATIENCE_MIN, SHARING_MODES)
 from model import TaxiModel
 
 # One consistent legend for the grid.
@@ -31,6 +32,7 @@ TAXI_COLORS = {
 }
 WAITING_COLOR = "#e53935"  # red: no taxi yet
 ASSIGNED_COLOR = "#fdd835"  # yellow: a taxi is on its way
+ABANDONED_COLOR = "#8d6e63"  # brown ring: gave up waiting
 TEXT_OUTLINE = [patheffects.withStroke(linewidth=2.2, foreground="white")]
 
 
@@ -40,8 +42,8 @@ def draw_city(model, fig=None):
     A custom drawing (instead of Mesa's make_space_component) because the
     taxis' planned routes and stops come from the model, not from single
     agents. Layers: district grid, planned routes, planned stops, waiting
-    passengers (one marker per district with a count), taxis with an
-    "on board / capacity" label.
+    passengers (one marker per district with a count), abandoned passengers
+    (at their origin), taxis with an "on board / capacity" label.
     """
     # Wide aspect (~0.56) so the whole grid fits one panel of Mesa's dashboard.
     fig = fig or Figure(figsize=(8.6, 4.8), layout="constrained")
@@ -81,7 +83,11 @@ def draw_city(model, fig=None):
 
     # Passengers outside taxis, grouped per district (count when > 1).
     groups = Counter()
+    gave_up = Counter()
     for p in model.passengers:
+        if p.status == ABANDONED:
+            gave_up[p.origin] += 1  # left the grid; marked where they waited
+            continue
         if p.pos is None:
             continue  # completed: left the map
         if p.status in (WAITING, ASSIGNED):
@@ -110,6 +116,14 @@ def draw_city(model, fig=None):
                    edgecolors="#333333", linewidths=0.5, zorder=4)
     if crosses:
         ax.scatter(*zip(*crosses), marker="x", s=30, c="black", zorder=4)
+    if gave_up:
+        rings = [(x - 0.28, y - 0.28) for x, y in gave_up]
+        ax.scatter(*zip(*rings), marker="o", s=30, facecolors="none",
+                   edgecolors=ABANDONED_COLOR, linewidths=1.3, zorder=4)
+        for (x, y), count in gave_up.items():
+            if count > 1:
+                ax.text(x - 0.28, y - 0.62, str(count), fontsize=6, ha="center",
+                        va="center", zorder=6, path_effects=TEXT_OUTLINE)
 
     # Taxis: square in the state colour, label "on board / capacity".
     if model.taxis:
@@ -140,6 +154,9 @@ def draw_city(model, fig=None):
                markeredgecolor="#333333", label="waiting, taxi assigned"),
         Line2D([], [], marker="x", ls="", color="black",
                label="not completed (deadline)"),
+        Line2D([], [], marker="o", ls="", markerfacecolor="none",
+               markeredgecolor=ABANDONED_COLOR, markeredgewidth=1.3,
+               label="abandoned (gave up waiting)"),
     ]
     ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.02, 1),
               fontsize=8, frameon=False, alignment="left",
@@ -164,12 +181,15 @@ def StatusPanel(model):
     """Simulation time, configuration and the main results."""
     m = model.latest_metrics
     status = "running" if model.running else "finished (deadline reached)"
+    patience = ("off" if model.patience_max is None
+                else f"{model.patience_min}-{model.patience_max} min")
     text = f"""
 ### Minute {model.minute} / {model.duration} — {status}
 
 **Configuration:** {len(model.taxis)} taxis · capacity {model.capacity} ·
 sharing `{model.sharing_mode}` · arrivals `{model.arrival_mode}`
 (window {model.arrival_window} min) · boarding {model.boarding_minutes} min/stop ·
+patience {patience} ·
 max extra delay {model.max_extra_delay} min · {model.width}×{model.height} districts ·
 seed {model.seed}
 
@@ -179,6 +199,8 @@ seed {model.seed}
 | Waiting / assigned / travelling | {m['waiting']} / {m['assigned']} / {m['travelling']} |
 | Completed | {m['completed']} ({fmt(m['completed_pct'])} %) |
 | Not completed at deadline | {m['not_completed']} |
+| Abandoned (patience exceeded) | {m['abandoned']} ({fmt(m['abandoned_pct'])} %) |
+| Acceptable trips (of created) | {fmt(m['acceptable_pct'])} % |
 | Avg waiting time (completed, n={m['completed']}) | {fmt(m['avg_wait_completed'])} min |
 | Avg total journey time (completed, n={m['completed']}) | {fmt(m['avg_total_completed'])} min |
 | Avg extra delay (completed, n={m['completed']}) | {fmt(m['avg_extra_delay_completed'])} min |
@@ -208,6 +230,12 @@ model_params = {
     "boarding_minutes": {"type": "SliderInt", "value": BOARDING_MINUTES,
                          "label": "Boarding time per stop (min)", "min": 0,
                          "max": 3, "step": 1},
+    "patience_min": {"type": "SliderInt", "value": PATIENCE_MIN,
+                     "label": "Patience min (min)", "min": 1, "max": 60,
+                     "step": 1},
+    "patience_max": {"type": "SliderInt", "value": 0,
+                     "label": "Patience max (min, 0 = never abandon)", "min": 0,
+                     "max": 60, "step": 1},
     "arrival_mode": {"type": "Select", "value": DEFAULTS["arrival_mode"],
                      "values": list(ARRIVAL_MODES), "label": "Passenger arrivals"},
     "arrival_window": {"type": "SliderInt", "value": DEFAULTS["arrival_window"],
@@ -223,7 +251,8 @@ model_params = {
 CHART_PANELS = [
     ("Passengers by status", {"waiting": "#e53935", "assigned": "#fdd835",
                               "travelling": "#1e88e5", "completed": "#43a047",
-                              "not_completed": "#000000"}),
+                              "not_completed": "#000000",
+                              "abandoned": ABANDONED_COLOR}),
     ("Average times, completed (min)", {"avg_wait_completed": "#ff9800",
                                         "avg_total_completed": "#1e88e5",
                                         "avg_extra_delay_completed": "#8e24aa"}),

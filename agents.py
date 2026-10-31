@@ -12,6 +12,7 @@ ASSIGNED = "assigned"  # a taxi confirmed and is coming
 TRAVELLING = "travelling"  # inside a taxi (including while boarding/alighting)
 COMPLETED = "completed"  # reached destination within the simulation
 NOT_COMPLETED = "not_completed"  # still waiting/assigned/travelling at the deadline
+ABANDONED = "abandoned"  # gave up waiting for a CONFIRM (patience exceeded)
 
 # Taxi states
 IDLE = "idle"
@@ -37,13 +38,15 @@ class PassengerAgent(mesa.Agent):
     (boarding starts); arrival_time = minute alighting at the destination ends.
     """
 
-    def __init__(self, model, origin, destination, request_time):
+    def __init__(self, model, origin, destination, request_time, patience=None):
         super().__init__(model)
         self.origin = origin
         self.destination = destination
         self.request_time = request_time
+        self.patience = patience  # minutes before abandoning; None = never
         self.pickup_time = None
         self.arrival_time = None
+        self.abandon_time = None
         self.promised_pickup = None  # estimated pickup time given in CONFIRM
         self.status = WAITING
         self.status_at_deadline = None  # last active status if NOT_COMPLETED
@@ -134,6 +137,13 @@ class PassengerAgent(mesa.Agent):
     def alight(self, minute):
         self.status = COMPLETED
         self.arrival_time = minute
+        self.model.grid.remove_agent(self)
+
+    def abandon(self, minute):
+        """Give up waiting. Only called while WAITING, so no taxi holds a stop
+        for this passenger (stops are added together with the CONFIRM)."""
+        self.status = ABANDONED
+        self.abandon_time = minute
         self.model.grid.remove_agent(self)
 
 

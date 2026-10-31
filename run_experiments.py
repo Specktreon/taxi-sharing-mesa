@@ -9,8 +9,9 @@ Each configuration is run with Mesa's batch_run once per seed. The same seed
 gives the same passengers and taxi start cells in every configuration, so the
 configurations are compared on identical demand where their sizes allow.
 MAX_EXTRA_DELAY_MINUTES is never part of a configuration: it stays fixed.
-An optional boarding_minutes column may be added; without it every run uses
-BOARDING_MINUTES from config.py.
+Optional boarding_minutes, patience_min and patience_max columns may be added;
+without them every run uses BOARDING_MINUTES, PATIENCE_MIN and PATIENCE_MAX
+from config.py. An empty patience_max cell disables abandonment for that row.
 
 Outputs (in --out, default "results"):
     runs.csv        one row per configuration and seed (all model metrics)
@@ -30,13 +31,16 @@ import pandas as pd
 from mesa import batch_run
 
 import metrics
-from config import BOARDING_MINUTES, MAX_EXTRA_DELAY_MINUTES
+from config import (BOARDING_MINUTES, MAX_EXTRA_DELAY_MINUTES, PATIENCE_MAX,
+                    PATIENCE_MIN)
 from model import TaxiModel
 
 CONFIG_COLUMNS = ["num_taxis", "num_passengers", "capacity", "sharing_mode",
                   "arrival_mode", "arrival_window", "duration"]
 # Optional columns: when absent, the model default from config.py is used.
-OPTIONAL_COLUMNS = {"boarding_minutes": BOARDING_MINUTES}
+OPTIONAL_COLUMNS = {"boarding_minutes": BOARDING_MINUTES,
+                    "patience_min": PATIENCE_MIN,
+                    "patience_max": PATIENCE_MAX}
 PARAM_COLUMNS = CONFIG_COLUMNS + list(OPTIONAL_COLUMNS)
 
 # Metrics summarised across seeds (label used in charts).
@@ -45,6 +49,9 @@ SUMMARY_METRICS = {
     "completed": "Passengers completed",
     "completed_pct": "Completed (%)",
     "not_completed": "Not completed",
+    "abandoned": "Abandoned (patience exceeded)",
+    "abandoned_pct": "Abandoned (%)",
+    "acceptable_pct": "Acceptable trips (% of created)",
     "avg_wait_completed": "Avg waiting time, completed (min)",
     "avg_in_vehicle_completed": "Avg in-vehicle time, completed (min)",
     "avg_total_completed": "Avg total journey time, completed (min)",
@@ -92,6 +99,7 @@ def run_config(row, seeds):
     """Run one configuration for every seed with Mesa's batch_run."""
     params = {col: row[col] for col in PARAM_COLUMNS}
     params = {k: (v.item() if hasattr(v, "item") else v) for k, v in params.items()}
+    params = {k: (None if pd.isna(v) else v) for k, v in params.items()}  # empty cell
     records = batch_run(
         TaxiModel,
         parameters=params,

@@ -22,6 +22,8 @@ from config import (
     DEFAULTS,
     MAX_EXTRA_DELAY_MINUTES,
     MINUTES_PER_DISTRICT,
+    PATIENCE_MAX,
+    PATIENCE_MIN,
     SHARING_MODES,
 )
 
@@ -67,7 +69,8 @@ class TaxiModel(mesa.Model):
         5. passengers read the replies
         6. taxis spend one minute driving one district or boarding/alighting
            (boarding_minutes at every pickup and drop-off)
-        7. clock advances; at the deadline unfinished passengers are marked
+        7. clock advances; passengers still WAITING after their patience
+           ABANDON; at the deadline unfinished passengers are marked
            NOT_COMPLETED and the model stops; metrics are collected
     """
 
@@ -84,6 +87,8 @@ class TaxiModel(mesa.Model):
         duration=DEFAULTS["duration"],
         minutes_per_district=MINUTES_PER_DISTRICT,
         boarding_minutes=BOARDING_MINUTES,
+        patience_min=PATIENCE_MIN,
+        patience_max=PATIENCE_MAX,
         max_extra_delay=MAX_EXTRA_DELAY_MINUTES,
         seed=DEFAULTS["seed"],
         taxi_starts=None,
@@ -102,6 +107,9 @@ class TaxiModel(mesa.Model):
         if duration < 1 or minutes_per_district < 1 or boarding_minutes < 0:
             raise ValueError("duration and minutes_per_district must be >= 1, "
                              "boarding_minutes >= 0")
+        if patience_max and not 1 <= patience_min <= patience_max:
+            raise ValueError("patience needs 1 <= patience_min <= patience_max "
+                             "(patience_max None or 0 = no abandonment)")
 
         self.width = width
         self.height = height
@@ -112,6 +120,9 @@ class TaxiModel(mesa.Model):
         self.arrival_window = max(1, min(int(arrival_window), self.duration))
         self.minutes_per_district = minutes_per_district
         self.boarding_minutes = int(boarding_minutes)
+        self.patience_min = int(patience_min)
+        # None or 0 disables abandonment (0 lets a UI slider switch it off).
+        self.patience_max = int(patience_max) if patience_max else None
         self.max_extra_delay = max_extra_delay
         self.seed = seed
         self.minute = 0
@@ -123,9 +134,20 @@ class TaxiModel(mesa.Model):
         )
         taxi_starts = generated_starts if taxi_starts is None else taxi_starts
         requests = generated_requests if requests is None else requests
+        # Patience comes from its own generator, drawn in request-list order:
+        # demand is unchanged and passenger i gets the same patience whatever
+        # the number of passengers.
+        if self.patience_max is None:
+            patiences = [None] * len(requests)
+        else:
+            patience_rng = random.Random(f"patience-{seed}")
+            patiences = [patience_rng.randint(self.patience_min, self.patience_max)
+                         for _ in requests]
         # Requests at or after the deadline could never be served; drop them.
         self.pending_requests = sorted(
-            (r for r in requests if r[0] < self.duration), key=lambda r: r[0]
+            ((*r, patience) for r, patience in zip(requests, patiences)
+             if r[0] < self.duration),
+            key=lambda r: r[0],
         )
 
         self.grid = MultiGrid(width, height, torus=False)
@@ -158,8 +180,8 @@ class TaxiModel(mesa.Model):
     # --- Simulation loop ---
     def spawn_due_passengers(self):
         while self.pending_requests and self.pending_requests[0][0] <= self.minute:
-            minute, origin, destination = self.pending_requests.pop(0)
-            passenger = PassengerAgent(self, origin, destination, minute)
+            minute, origin, destination, patience = self.pending_requests.pop(0)
+            passenger = PassengerAgent(self, origin, destination, minute, patience)
             self.grid.place_agent(passenger, origin)
             self.passengers.append(passenger)
             self.agent_by_id[passenger.unique_id] = passenger
@@ -179,9 +201,18 @@ class TaxiModel(mesa.Model):
         taxis.do("move")
 
         self.minute += 1
+        self.abandon_impatient()
         if self.minute >= self.duration:
             self.finish()
         self.collect()
+
+    def abandon_impatient(self):
+        """Passengers still WAITING (no CONFIRM) after `patience` minutes give
+        up. Assigned passengers never abandon."""
+        for p in self.passengers:
+            if (p.status == WAITING and p.patience is not None
+                    and self.minute - p.request_time >= p.patience):
+                p.abandon(self.minute)
 
     def finish(self):
         """Deadline reached: anyone not delivered is NOT_COMPLETED."""

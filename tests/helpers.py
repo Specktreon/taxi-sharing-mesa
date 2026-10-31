@@ -1,6 +1,7 @@
 """Shared helpers for deterministic test scenarios."""
 
-from agents import COMPLETED, DROPOFF, NOT_COMPLETED, PICKUP, TRAVELLING, WAITING, ASSIGNED
+from agents import (ABANDONED, ASSIGNED, COMPLETED, DROPOFF, NOT_COMPLETED, PICKUP,
+                    TRAVELLING, WAITING)
 from model import TaxiModel
 
 
@@ -36,6 +37,10 @@ def check_invariants(model):
             assert p.extra_delay <= model.max_extra_delay
         if p.status in (WAITING, ASSIGNED):
             assert p.pickup_time is None
+        if p.status == ABANDONED:
+            assert p.pos is None and p.pickup_time is None
+            assert p.abandon_time - p.request_time == p.patience
+            assert all(q is not p for taxi in model.taxis for _, q in taxi.stops)
         if p.pickup_time is not None and p.promised_pickup is not None:
             # Acceptability: pickup never slips more than MAX past the promise.
             assert p.pickup_time - p.promised_pickup <= model.max_extra_delay
@@ -44,7 +49,7 @@ def check_invariants(model):
     assert m["created"] == len(statuses)
     assert (
         m["waiting"] + m["assigned"] + m["travelling"] + m["completed"]
-        + m["not_completed"]
+        + m["not_completed"] + m["abandoned"]
     ) == m["created"]
     assert m["empty_distance"] + m["occupied_distance"] == m["total_distance"]
 
