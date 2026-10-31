@@ -39,8 +39,8 @@ WALK_COLOR = "#00897b"  # teal diamond + arrow: walking to the pickup district
 RING_SHADE = "#fff1dc"  # congestion ring (light)
 CENTER_SHADE = "#fde0b8"  # congested centre (a little darker)
 # One colour per bus line, distinct from the taxi and passenger colours.
-BUS_LINE_COLORS = {"H1": "#d81b60", "H2": "#5e35b1", "V1": "#00838f",
-                   "V2": "#9e9d24"}
+BUS_LINE_COLORS = {"H1": "#d81b60", "H2": "#283593", "H3": "#00838f",
+                   "V1": "#9e9d24", "V2": "#5e35b1", "V3": "#37474f"}
 TEXT_OUTLINE = [patheffects.withStroke(linewidth=2.2, foreground="white")]
 
 
@@ -99,9 +99,12 @@ def draw_bus_network(ax, model):
                                     boxstyle="round,pad=0,rounding_size=0.28",
                                     facecolor=color, edgecolor="#222222",
                                     linewidth=0.7, zorder=4.5))
-        ax.text(x, y, f"{len(bus.onboard)}/{bus.capacity}", fontsize=5,
-                color="white", fontweight="bold", ha="center", va="center",
-                rotation=0 if horizontal else 90, zorder=4.6)
+        # Horizontal label on a small white tag, readable on every line.
+        ax.text(x, y, f"{len(bus.onboard)}/{bus.capacity}", fontsize=6,
+                color="#111111", fontweight="bold", ha="center", va="center",
+                zorder=4.6,
+                bbox={"boxstyle": "round,pad=0.12", "facecolor": "white",
+                      "edgecolor": color, "linewidth": 0.6, "alpha": 0.92})
 
 
 def legend_handles(model):

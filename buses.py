@@ -10,7 +10,8 @@ finish alighting at its end, as in taxis.
 
 import mesa
 
-from config import BUS_CAPACITY, BUS_STOP_SPACING, BUS_WALK_MAX, BUSES_PER_LINE
+from config import (BUS_CAPACITY, BUS_MIN_TRIP, BUS_STOP_SPACING, BUS_WALK_MAX,
+                    BUSES_PER_LINE)
 from routing import manhattan
 
 
@@ -29,19 +30,22 @@ class BusLine:
 
 
 def make_bus_lines(width, height):
-    """Rows h//3 and 2h//3 (H1, H2) and columns w//3 and 2w//3 (V1, V2)."""
+    """Rows h//4, h//2, 3h//4 (H1-H3) and columns w//4, w//2, 3w//4 (V1-V3)."""
     lines = []
-    for i, y in enumerate((height // 3, 2 * height // 3), 1):
+    for i, y in enumerate((height // 4, height // 2, 3 * height // 4), 1):
         lines.append(BusLine(len(lines), f"H{i}", [(x, y) for x in range(width)]))
-    for i, x in enumerate((width // 3, 2 * width // 3), 1):
+    for i, x in enumerate((width // 4, width // 2, 3 * width // 4), 1):
         lines.append(BusLine(len(lines), f"V{i}", [(x, y) for y in range(height)]))
     return lines
 
 
 def choose_bus_trip(lines, origin, destination):
     """(line, boarding stop, alighting stop) with the least total walking, or
-    None. Both stops must be on the same line (no transfers), different, and
-    each within BUS_WALK_MAX districts. Ties: lower line id, then stop order."""
+    None. Only trips of at least BUS_MIN_TRIP districts use the bus. Both stops
+    must be on the same line (no transfers), different, and each within
+    BUS_WALK_MAX districts. Ties: lower line id, then stop order."""
+    if manhattan(origin, destination) < BUS_MIN_TRIP:
+        return None
     best = None
     for line in lines:
         near_origin = [s for s in line.stop_index if manhattan(origin, s) <= BUS_WALK_MAX]

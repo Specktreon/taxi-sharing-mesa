@@ -42,9 +42,10 @@ Write the results only from `results/summary.csv`, `results/runs.csv` and
 - **Walking** to a neighbouring district: candidate pickup districts, "the
   walker gets there first" rule, why extra delay is measured from the pickup
   district and waiting time includes the walk.
-- **Buses**: line layout (rows/columns at 1/3 and 2/3), stops, back-and-forth
-  service, capacity; the mode-choice rule (both ends within 2 districts of
-  stops on one line, least walking, no transfers); the bus journey.
+- **Buses**: line layout (3 + 3 lines at 1/4, 1/2 and 3/4 of the grid, 2 buses
+  each), stops, back-and-forth service, capacity; the mode-choice rule (trip
+  of at least 6 districts, both ends within 3 districts of stops on one line,
+  least walking, no transfers); the bus journey.
 - **Congestion**: centre one third of the grid x3, ring x2; integer costs;
   planning uses the same costs as movement (estimates stay exact, progress
   credit); routes do not avoid congestion.
@@ -95,9 +96,11 @@ Write the results only from `results/summary.csv`, `results/runs.csv` and
   `no_detour` (S2) almost never triggers on random trips; capacity 4 adds
   little over 2 with 1-minute stops.
 - Walking: small gains in completion and wait (S5 vs S4).
-- Buses: few passengers qualify under the walking rule (~5 %), so totals barely
-  change, but bus riders complete well; very low bus occupancy. Discuss the
-  rule and the fixed lines.
+- Buses: about 16 % of passengers take the bus. That frees taxis: without
+  sharing (S7 vs S1) completion rises clearly; with sharing (S6 vs S4) the
+  gain is small, and taxi distance per completed passenger falls. Bus riders
+  wait longer (the walk to the stop counts) and bus occupancy stays low
+  (~0.13): fixed full-length lines. Discuss the mode-choice rule.
 - Congestion: the largest loss (S8, S9); sharing keeps more of its benefit than
   single rides.
 - Patience: abandonment frees taxis, so completion can rise without sharing

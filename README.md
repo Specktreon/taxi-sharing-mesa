@@ -90,7 +90,7 @@ A box above the map lists the active features ("Buses on · Walking off ·
 | | `2/4` next to a taxi | passengers on board / seats |
 | | thin line | the taxi's planned route, in the taxi's colour |
 | | ▲ / ▼ | planned pickup / planned drop-off of that taxi |
-| Buses | wide light band | a bus line ("road"), one colour per line (H1, H2, V1, V2) |
+| Buses | wide light band | a bus line ("road"), one colour per line (H1-H3, V1-V3) |
 | | small white square | bus stop |
 | | rounded box with `3/10` | bus in its line colour: passengers on board / 10 |
 | Passengers | red dot | taxi passenger waiting, no taxi yet |
@@ -185,7 +185,7 @@ Columns of `experiments.csv`:
 | Maximum extra delay | `MAX_EXTRA_DELAY_MINUTES = 10` |
 | Patience (when on) | uniform integer in 10-30 minutes |
 | Walking | 3 minutes per district |
-| Buses (when on) | 4 lines, 3 buses each, 10 seats, stops every 3 districts |
+| Buses (when on) | 6 lines, 2 buses each, 10 seats, stops every 3 districts; bus only for trips of 6+ districts with stops within 3 districts of both ends |
 | Base fleet / demand | 20 taxis, 90 passengers (calibrated, section 7) |
 
 `TaxiModel` still accepts every parameter (grid size, duration, ...) so tests
@@ -315,17 +315,19 @@ delay are measured from the pickup district.
 
 **Buses (feature).**
 
-- **Lines:** two horizontal lines along rows h/3 and 2h/3 (H1, H2) and two
-  vertical lines along columns w/3 and 2w/3 (V1, V2): rows/columns 10 and 20
-  on 30x30. Stops every 3 districts along each line, including both ends.
-- **Buses:** 3 per line, 10 seats, spread evenly over the line at the start,
-  driving back and forth at taxi speed (congestion applies). A bus stands
-  1 minute at a stop only when someone boards or alights.
-- **Mode choice** (once, at creation): if one line has a stop within 2
-  districts (`BUS_WALK_MAX`) of the origin and a *different* stop within 2
-  districts of the destination, the passenger takes the bus, using the line
-  and stops with the least total walking; otherwise it calls a taxi. No
-  transfers between lines.
+- **Lines:** three horizontal lines along rows h/4, h/2 and 3h/4 (H1-H3) and
+  three vertical lines along columns w/4, w/2 and 3w/4 (V1-V3): rows/columns
+  7, 15 and 22 on 30x30. Stops every 3 districts along each line, including
+  both ends.
+- **Buses:** 2 per line (12 in all), 10 seats, spread evenly over the line at
+  the start, driving back and forth at taxi speed (congestion applies). A bus
+  stands 1 minute at a stop only when someone boards or alights.
+- **Mode choice** (once, at creation): if the trip is at least 6 districts
+  long (Manhattan distance origin to destination, `BUS_MIN_TRIP`) and one line
+  has a stop within 3 districts (`BUS_WALK_MAX`) of the origin and a
+  *different* stop within 3 districts of the destination, the passenger takes
+  the bus, using the line and stops with the least total walking; otherwise
+  it calls a taxi. No transfers between lines.
 - **Bus journey:** walk to the boarding stop (3 min per district), wait,
   board the first bus that reaches the stop heading towards the alighting
   stop with a free seat, ride, alight, walk to the destination. Arrival =
@@ -415,15 +417,26 @@ charts in `results/charts/`):
 | S3 | – | 84.0 ± 3.1 | 10.6 ± 1.7 | 35.2 ± 2.6 | 3.6 ± 0.4 | 24.1 ± 1.2 | 20.8 ± 1.9 | 0.0 | 84.0 ± 3.1 |
 | S4 | – | 86.3 ± 2.7 | 10.0 ± 1.4 | 34.8 ± 2.3 | 3.9 ± 0.2 | 23.0 ± 0.8 | 20.5 ± 1.2 | 0.0 | 86.3 ± 2.7 |
 | S5 | walk | 88.7 ± 4.9 | 8.7 ± 1.1 | 33.6 ± 2.0 | 4.0 ± 0.3 | 21.9 ± 1.1 | 17.6 ± 1.9 | 0.0 | 88.7 ± 4.9 |
-| S6 | bus | 85.7 ± 3.9 | 9.8 ± 1.2 | 34.6 ± 2.0 | 3.9 ± 0.3 | 22.6 ± 1.3 | 20.5 ± 1.6 | 5.2 ± 2.1 | 85.7 ± 3.9 |
-| S7 | bus | 61.0 ± 2.7 | 20.5 ± 3.2 | 41.7 ± 3.5 | 0.0 ± 0.0 | 37.6 ± 1.3 | 45.7 ± 2.2 | 5.2 ± 2.1 | 61.0 ± 2.7 |
+| S6 | bus | 88.1 ± 2.9 | 10.4 ± 1.3 | 35.1 ± 2.0 | 3.4 ± 0.4 | 20.6 ± 1.3 | 20.3 ± 2.3 | 15.8 ± 3.7 | 88.1 ± 2.9 |
+| S7 | bus | 67.7 ± 5.0 | 18.6 ± 2.9 | 40.5 ± 3.4 | 0.0 ± 0.0 | 33.4 ± 2.9 | 44.8 ± 2.2 | 15.8 ± 3.7 | 67.7 ± 5.0 |
 | S8 | cong | 69.4 ± 5.0 | 12.4 ± 1.4 | 42.6 ± 2.5 | 2.8 ± 0.6 | 25.7 ± 1.9 | 21.9 ± 2.7 | 0.0 | 69.4 ± 5.0 |
 | S9 | cong | 40.8 ± 2.4 | 22.4 ± 2.9 | 49.6 ± 4.1 | 0.0 ± 0.0 | 42.3 ± 3.2 | 47.8 ± 2.2 | 0.0 | 40.8 ± 2.4 |
 | S10 | pat | 81.0 ± 3.9 | 8.1 ± 0.8 | 33.2 ± 1.5 | 3.8 ± 0.3 | 22.9 ± 1.3 | 18.4 ± 1.3 | 0.0 | 78.1 ± 3.1 |
 | S11 | pat | 66.8 ± 3.8 | 12.6 ± 1.0 | 33.6 ± 1.9 | 0.0 ± 0.0 | 31.0 ± 1.9 | 31.8 ± 2.5 | 0.0 | 66.8 ± 3.8 |
-| S12 | all 4 | 71.9 ± 5.6 | 8.5 ± 0.6 | 39.0 ± 1.8 | 2.8 ± 0.7 | 21.9 ± 1.6 | 16.3 ± 2.3 | 5.2 ± 2.1 | 69.9 ± 5.0 |
+| S12 | all 4 | 75.8 ± 5.4 | 10.0 ± 1.2 | 40.3 ± 1.5 | 2.8 ± 0.4 | 19.9 ± 1.7 | 17.0 ± 2.3 | 15.8 ± 3.7 | 73.8 ± 5.1 |
 
-Abandoned with patience: S10 10.8 ± 4.4 %, S11 26.7 ± 3.2 %, S12 12.8 ± 3.2 %.
+Abandoned with patience: S10 10.8 ± 4.4 %, S11 26.7 ± 3.2 %, S12 8.0 ± 3.2 %.
+
+By mode, in the bus scenarios (completed % / wait / total time, minutes):
+
+| Id | Taxi passengers | Bus passengers | Bus occupancy |
+|---|---|---|---|
+| S6 | 88.6 ± 3.7 / 8.8 ± 1.5 / 34.1 ± 2.4 | 86.0 ± 9.7 / 19.0 ± 2.6 / 39.8 ± 2.8 | 0.13 ± 0.03 |
+| S7 | 64.4 ± 5.2 / 18.4 ± 3.5 / 40.6 ± 4.0 | 86.0 ± 9.7 / 19.0 ± 2.6 / 39.8 ± 2.8 | 0.13 ± 0.03 |
+| S12 | 75.3 ± 6.7 / 7.7 ± 0.8 / 39.0 ± 1.4 | 78.2 ± 14.5 / 21.8 ± 4.1 / 47.2 ± 6.6 | 0.14 ± 0.04 |
+
+Bus passengers' waiting time includes the walk to the stop; their total time
+includes both walks.
 These numbers are copied from the run of the current code; re-run
 `python run_experiments.py` after any change and update the table from
 `results/summary.csv`.
@@ -459,11 +472,11 @@ These numbers are copied from the run of the current code; re-run
   a better offer, and walking time is not limited by the extra-delay rule.
 - **Buses:** fixed lines and timetable-free back-and-forth service; **no
   transfers** between lines; the **mode choice rule** is a fixed walking
-  threshold (both ends within 2 districts of stops on one line), decided once
-  and never revised (a bus passenger never switches to a taxi, even when the
-  bus is slow). On 30x30 only about 5 % of passengers qualify, so buses
-  change the totals little. Buses always drive their full lines, so bus
-  occupancy is low (about 0.04-0.06 passengers per bus-district).
+  threshold (trip of at least 6 districts, both ends within 3 districts of
+  stops on one line), decided once and never revised (a bus passenger never
+  switches to a taxi, even when a taxi would be faster). On 30x30 about 16 %
+  of passengers take the bus. Buses always drive their full lines, so bus
+  occupancy stays low (about 0.13-0.14 passengers per bus-district).
 - **Bus-km are not car-km:** `bus_distance` is reported separately from taxi
   distance. A bus district and a taxi district differ in emissions and road
   space, so the two cannot be added or compared directly as a pollution or
