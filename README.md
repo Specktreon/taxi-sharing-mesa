@@ -441,6 +441,26 @@ By mode, in the bus scenarios (completed % / wait / total time, minutes):
 
 Bus passengers' waiting time includes the walk to the stop; their total time
 includes both walks.
+
+**Driving with buses.** The "Taxi dist./completed" column counts taxis only.
+Buses also drive: their full lines, whatever their load. Counting both
+(vehicle distance = taxi + bus, per run, in districts):
+
+| Id | Taxi distance | Bus distance | Vehicle distance | Vehicle dist./completed |
+|---|---|---|---|---|
+| S1 (no buses) | 2066.9 ± 51.1 | 0 | 2066.9 ± 51.1 | 39.5 ± 2.1 |
+| S4 (no buses) | 1783.7 ± 81.8 | 0 | 1783.7 ± 81.8 | 23.0 ± 0.8 |
+| S6 | 1634.9 ± 103.7 | 1413.6 ± 5.5 | 3048.5 ± 106.8 | 38.5 ± 1.6 |
+| S7 | 2023.4 ± 76.9 | 1413.6 ± 5.5 | 3437.0 ± 77.7 | 56.8 ± 4.6 |
+| S12 | 1350.9 ± 87.6 | 1217.9 ± 4.6 | 2568.8 ± 89.8 | 37.8 ± 2.8 |
+
+So the buses lower the *taxi* distance but raise the *total* vehicle distance
+at this demand: they carry only about 0.13 passengers per district driven. (In
+S12 congestion slows the buses, so they cover fewer districts.) A bus is a
+bigger vehicle than a taxi, so bus districts are not directly comparable to
+car districts for pollution or road space; the totals count vehicle movements
+only.
+
 These numbers are copied from the run of the current code; re-run
 `python run_experiments.py` after any change and update the table from
 `results/summary.csv`.
@@ -458,13 +478,26 @@ These numbers are copied from the run of the current code; re-run
 `plot_analysis.py` draws `results_analysis/sweep.png` and `fleet.png` (mean
 line, ± 1 std band, one line per mode) and writes
 `results_analysis/fleet_equivalence.csv`: per mode, the smallest fleet whose
-mean completed % reaches the S1 level (58.3 %) and 85 %:
+mean completed % reaches the S1 level (58.3 %) and 85 %, with taxi distance,
+bus distance and their sum (vehicle distance, per run). In `fleet.png` the
+dashed line is the taxi + bus distance of the bus mode.
 
-| Mode | Fleet for S1 level | Taxi distance | Empty % | Fleet for 85 % | Taxi distance | Empty % |
-|---|---|---|---|---|---|---|
-| none, cap 1 | 20 (58.3 ± 3.3 %) | 2066.9 ± 51.1 | 45.3 ± 2.6 | not reached (81.9 ± 5.4 % with 30) | – | – |
-| detour, cap 4 | 12 (59.8 ± 4.2 %) | 1219.1 ± 23.9 | 24.0 ± 3.3 | 20 (86.3 ± 2.7 %) | 1783.7 ± 81.8 | 20.5 ± 1.2 |
-| detour, cap 4 + buses | 10 (58.7 ± 3.6 %) | 1023.2 ± 26.3 | 25.4 ± 3.5 | 18 (85.3 ± 3.3 %) | 1604.0 ± 82.3 | 22.0 ± 3.0 |
+| Mode | Target | Taxis | Completed % | Taxi distance | Bus distance | Vehicle distance | Empty taxi % |
+|---|---|---|---|---|---|---|---|
+| none, cap 1 | S1 level | 20 | 58.3 ± 3.3 | 2066.9 ± 51.1 | 0 | 2066.9 ± 51.1 | 45.3 ± 2.6 |
+| detour, cap 4 | S1 level | 12 | 59.8 ± 4.2 | 1219.1 ± 23.9 | 0 | 1219.1 ± 23.9 | 24.0 ± 3.3 |
+| detour, cap 4 + buses | S1 level | 10 | 58.7 ± 3.6 | 1023.2 ± 26.3 | 1413.6 ± 5.5 | 2436.8 ± 27.7 | 25.4 ± 3.5 |
+| none, cap 1 | 85 % | not reached (81.9 ± 5.4 % with 30 taxis, 2666.8 ± 143.6 districts) | | | | | |
+| detour, cap 4 | 85 % | 20 | 86.3 ± 2.7 | 1783.7 ± 81.8 | 0 | 1783.7 ± 81.8 | 20.5 ± 1.2 |
+| detour, cap 4 + buses | 85 % | 18 | 85.3 ± 3.3 | 1604.0 ± 82.3 | 1413.6 ± 5.5 | 3017.6 ± 84.4 | 22.0 ± 3.0 |
+
+Detour sharing without buses gives the same service as single rides with 8
+fewer taxis and 41.0 % less driving (1219.1 vs 2066.9 districts). Adding buses
+saves 2 more taxis and some taxi driving, but the buses' own 1413.6 districts
+make the total vehicle distance higher than single rides at this demand (2436.8
+vs 2066.9 districts, +18 %), because the buses drive their full lines while
+carrying about 0.13 passengers per district. Bus districts are not directly
+comparable to car districts (bigger vehicle).
 
 `results_analysis/findings.md` summarises what both sets and S1-S12 show
 (when sharing helps, taxis and driving saved, the waiting / in-vehicle
@@ -506,6 +539,9 @@ trade-off, and the effect of each feature).
   switches to a taxi, even when a taxi would be faster). On 30x30 about 16 %
   of passengers take the bus. Buses always drive their full lines, so bus
   occupancy stays low (about 0.13-0.14 passengers per bus-district).
+- **Buses add driving:** with buses on, the total vehicle distance (taxi + bus)
+  is higher than with single rides at this demand, although the taxi distance
+  is lower (section 8).
 - **Bus-km are not car-km:** `bus_distance` is reported separately from taxi
   distance. A bus district and a taxi district differ in emissions and road
   space, so the two cannot be added or compared directly as a pollution or

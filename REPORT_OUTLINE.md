@@ -85,7 +85,10 @@ Write the results only from `results/summary.csv`, `results/runs.csv` and
   - waiting time and total journey time (completed);
   - extra delay (taxi passengers);
   - taxi distance per completed passenger and empty distance share;
-  - bus share, and per-mode completed % / times for S6, S7, S12;
+  - for the bus scenarios S6, S7, S12: bus share, per-mode completed % /
+    times, and taxi, bus and total vehicle distance (README §8 table);
+  - fleet equivalence (`results_analysis/fleet_equivalence.csv`): taxis needed
+    for the same service, with taxi, bus and vehicle distance;
   - acceptable % and abandoned % for S10-S12.
 - Report numbers only as produced by the runs; always give the completed % next
   to averages.
@@ -98,16 +101,21 @@ Write the results only from `results/summary.csv`, `results/runs.csv` and
 - Walking: small gains in completion and wait (S5 vs S4).
 - Buses: about 16 % of passengers take the bus. That frees taxis: without
   sharing (S7 vs S1) completion rises clearly; with sharing (S6 vs S4) the
-  gain is small, and taxi distance per completed passenger falls. Bus riders
-  wait longer (the walk to the stop counts) and bus occupancy stays low
-  (~0.13): fixed full-length lines. Discuss the mode-choice rule.
+  gain is small. Taxi distance per completed passenger falls, but the buses
+  drive their full lines (~1414 districts per run) carrying ~0.13 passengers
+  per district, so the total vehicle distance is *higher* with buses at this
+  demand (S6: 3048.5 vs S4: 1783.7 districts). Be explicit that a bus district
+  is not a car district. Bus riders wait longer (the walk to the stop counts).
+  Discuss the mode-choice rule and the fixed lines.
 - Congestion: the largest loss (S8, S9); sharing keeps more of its benefit than
   single rides.
 - Patience: abandonment frees taxis, so completion can rise without sharing
   (S11 vs S1) while acceptable % falls with sharing (S10 vs S4); explain via
   `acceptable_pct`.
 - Traffic and pollution through proxies only: taxi distance per passenger,
-  empty share, occupancy; bus-km are not car-km. Make no claims about measured
+  empty share, occupancy, and total vehicle distance (taxi + bus); bus-km are
+  not car-km. Sharing without buses cuts driving by about 41 % for the same
+  service; buses do not, at this demand. Make no claims about measured
   pollution or congestion.
 
 ## 9. Limitations and future work (~0.5 page)

@@ -5,11 +5,19 @@ Usage (after running the two experiment sets):
     python run_experiments.py --config experiments_fleet.csv --out results_fleet --no-charts
     python plot_analysis.py
 
-Reads results_sweep/summary.csv, results_fleet/summary.csv and (for the S1
-reference level) results/summary.csv. Writes to results_analysis/:
+Reads results_sweep/summary.csv, results_fleet/summary.csv and runs.csv, and
+(for the S1 reference level) results/summary.csv. Writes to results_analysis/:
     sweep.png              load sweep (x = passengers), mean line + std band
-    fleet.png              fleet sizes (x = taxis), with S1 and 85 % lines
-    fleet_equivalence.csv  per mode: smallest fleet reaching the S1 level / 85 %
+    fleet.png              fleet sizes (x = taxis), with S1 and 85 % lines; the
+                           distance panel adds taxi + bus distance (dashed)
+    fleet_equivalence.csv  per mode: smallest fleet reaching the S1 level / 85 %,
+                           with taxi, bus and total vehicle distance
+
+Vehicle distance = taxi distance + bus distance, summed per run before taking
+mean and std. Buses drive their full lines whatever their load, so with buses
+on, the total vehicle distance is much larger than the taxi distance. A bus
+district is not equivalent to a car district (bigger vehicle), so the total is
+a count of vehicle movements, not a pollution measure.
 """
 
 from pathlib import Path
@@ -63,6 +71,20 @@ def line_panel(ax, groups, x, metric, xlabel):
     ax.tick_params(labelsize=8)
 
 
+def with_vehicle_distance(summary, runs):
+    """Add vehicle_distance (taxi + bus per run) and vehicle distance per
+    completed passenger, mean and std (ddof=0, as in summary.csv)."""
+    runs = runs.assign(vehicle_distance=runs["total_distance"] + runs["bus_distance"])
+    runs = runs.assign(vehicle_distance_per_completed=(runs["vehicle_distance"]
+                                                       / runs["completed"]))
+    grouped = runs.groupby("config_id", sort=False)
+    stats = pd.DataFrame(index=grouped.size().index)
+    for metric in ("vehicle_distance", "vehicle_distance_per_completed"):
+        stats[f"{metric}_mean"] = grouped[metric].mean()
+        stats[f"{metric}_std"] = grouped[metric].std(ddof=0)
+    return summary.merge(stats, left_on="config_id", right_index=True)
+
+
 def s1_level():
     s = pd.read_csv("results/summary.csv").set_index("config_id")
     return s.loc["S1", "completed_pct_mean"]
@@ -91,6 +113,19 @@ def plot_fleet(fleet, reference):
         axes[0].text(axes[0].get_xlim()[1], level, f" {text}", fontsize=7.5,
                      va="bottom", ha="right", color="#52514e")
     line_panel(axes[1], groups, "num_taxis", "total_distance", "taxis (90 passengers)")
+    # With buses, also the distance driven by all vehicles (taxis + buses).
+    bus_rows = groups[("detour", 4, True)]
+    mean = bus_rows["vehicle_distance_mean"]
+    std = bus_rows["vehicle_distance_std"]
+    color = MODES[("detour", 4, True)][1]
+    axes[1].plot(bus_rows["num_taxis"], mean, "--", color=color, linewidth=1.8,
+                 marker="s", markersize=3.5,
+                 label="detour cap 4 + buses: taxi + bus distance")
+    axes[1].fill_between(bus_rows["num_taxis"], mean - std, mean + std, color=color,
+                         alpha=0.10, linewidth=0)
+    axes[1].set_title("Vehicle distance (districts): taxis; dashed = taxis + buses",
+                      fontsize=10)
+    axes[1].legend(fontsize=8, frameon=False, loc="lower right")
     axes[0].legend(fontsize=8, frameon=False, loc="lower right")
     fig.suptitle("Fleet size for the same service (90 passengers; mean over seeds "
                  "1-10, bands ± 1 std)", fontsize=11)
@@ -113,8 +148,10 @@ def fleet_equivalence(fleet, reference):
             else:
                 best = hit.iloc[0]
                 row["num_taxis"] = int(best["num_taxis"])
-                for metric in ("completed_pct", "total_distance", "empty_distance_pct",
-                               "distance_per_completed"):
+                for metric in ("completed_pct", "total_distance", "bus_distance",
+                               "vehicle_distance", "empty_distance_pct",
+                               "distance_per_completed",
+                               "vehicle_distance_per_completed"):
                     row[f"{metric}_mean"] = best[f"{metric}_mean"]
                     row[f"{metric}_std"] = best[f"{metric}_std"]
             rows.append(row)
@@ -124,7 +161,8 @@ def fleet_equivalence(fleet, reference):
 def main():
     OUT.mkdir(exist_ok=True)
     sweep = pd.read_csv("results_sweep/summary.csv")
-    fleet = pd.read_csv("results_fleet/summary.csv")
+    fleet = with_vehicle_distance(pd.read_csv("results_fleet/summary.csv"),
+                                  pd.read_csv("results_fleet/runs.csv"))
     reference = s1_level()
     plot_sweep(sweep)
     plot_fleet(fleet, reference)
