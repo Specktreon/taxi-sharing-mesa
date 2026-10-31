@@ -1,17 +1,13 @@
 """Passenger acceptability: patience, abandonment and acceptable trips."""
 
-from pathlib import Path
-
 import pandas as pd
 import pytest
 
 import run_experiments
 from agents import ABANDONED, ASSIGNED, COMPLETED, WAITING
-from helpers import legacy_model, make_model, run
+from helpers import assert_reproduces_stored, legacy_model, make_model, run
 from messages import ACCEPT, PROPOSE
 from model import TaxiModel
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_waiting_passenger_abandons_after_patience():
@@ -151,12 +147,9 @@ def test_optional_patience_columns(tmp_path):
 
 
 def test_default_results_unchanged(tmp_path):
-    """With patience disabled (the default), regenerating results/ reproduces
-    every value already stored there; only new columns may be added."""
-    run_experiments.run(ROOT / "experiments.csv", out=tmp_path, charts=False)
-    for name in ["runs.csv", "summary.csv", "passengers.csv"]:
-        stored = pd.read_csv(ROOT / "results" / name)
-        fresh = pd.read_csv(tmp_path / name)
-        assert set(stored.columns) <= set(fresh.columns), name
-        pd.testing.assert_frame_equal(fresh[stored.columns], stored,
-                                      check_exact=True, obj=name)
+    """With every feature at its default (off: the four feature columns
+    removed), S1-S4 reproduce every value stored in results/ for all seeds,
+    including summary.csv; only new columns may be added."""
+    assert_reproduces_stored(
+        tmp_path,
+        edit=lambda c: c.drop(columns=["buses", "walking", "congestion", "patience"]))

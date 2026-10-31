@@ -1,16 +1,10 @@
 """Optional traffic congestion: integer cell costs used by movement and planning."""
 
-from pathlib import Path
-
-import pandas as pd
 import pytest
 
-import run_experiments
 from agents import COMPLETED
-from helpers import legacy_model, make_model, run
+from helpers import assert_reproduces_stored, legacy_model, make_model, run
 from routing import congestion_factor
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_congestion_zones_on_default_grid():
@@ -84,16 +78,10 @@ def test_no_detour_promises_exact_under_congestion():
 
 
 def test_congestion_off_reproduces_results(tmp_path):
-    """An explicit congestion = "off" column reproduces every stored value."""
-    configs = pd.read_csv(ROOT / "experiments.csv")
-    configs["congestion"] = "off"
-    config = tmp_path / "configs.csv"
-    configs.to_csv(config, index=False)
-    out = tmp_path / "out"
-    runs, _, _ = run_experiments.run(config, out=out, charts=False)
-    assert (runs["congestion"] == "off").all()
-    for name in ["runs.csv", "summary.csv", "passengers.csv"]:
-        stored = pd.read_csv(ROOT / "results" / name)
-        fresh = pd.read_csv(out / name)
-        pd.testing.assert_frame_equal(fresh[stored.columns], stored,
-                                      check_exact=True, obj=name)
+    """An explicit congestion = "off" column (the older string format)
+    reproduces the stored S1-S4 values (seeds 1-2)."""
+    def explicit_off(configs):
+        configs["congestion"] = "off"
+        return configs
+
+    assert_reproduces_stored(tmp_path, edit=explicit_off, seeds=[1, 2])

@@ -1,8 +1,8 @@
 """Run the experiment configurations and export CSV results and charts.
 
 Usage (from the project folder):
-    python run_experiments.py                       # all configs, seeds 1-5
-    python run_experiments.py --only C3 C6          # selected configs
+    python run_experiments.py                       # all configs, seeds 1-10
+    python run_experiments.py --only S3 S6          # selected configs
     python run_experiments.py --seeds 1 2 --out results_quick
 
 Each configuration is run with Mesa's batch_run once per seed. The same seed
@@ -97,13 +97,15 @@ SUMMARY_METRICS = {
     "empty_distance_pct": "Empty share of taxi distance (%)",
     "passenger_distance": "Passenger distance (passenger-districts)",
     "avg_occupancy": "Avg occupancy (passenger / taxi distance)",
-    "distance_per_completed": "Distance per completed passenger (districts)",
+    "distance_per_completed": "Taxi distance per completed passenger (districts)",
     "utilization_pct": "Taxi utilization (%)",
 }
 
+SEEDS = tuple(range(1, 11))  # default seeds: 1-10
+
 CHART_METRICS = ["completed_pct", "avg_wait_completed", "avg_total_completed",
                  "avg_extra_delay_completed", "distance_per_completed",
-                 "empty_distance_pct", "avg_occupancy", "utilization_pct"]
+                 "empty_distance_pct", "bus_share_pct", "acceptable_pct"]
 
 # Categorical colours by sharing mode (fixed order) plus hatching, so the modes
 # stay distinguishable without colour.
@@ -195,18 +197,37 @@ def summarise(runs, configs):
     return summary.reset_index()
 
 
+def feature_label(row):
+    """Short label of the features a configuration switches on."""
+    on = [name for name, active in (
+        ("bus", bool(row["buses"])),
+        ("walk", bool(row["walk_radius"])),
+        ("cong", row["congestion"] != "off"),
+        ("pat", not pd.isna(row["patience_max"]) and bool(row["patience_max"])),
+    ) if active]
+    if len(on) == 4:
+        return "all 4"
+    return "+" + "+".join(on) if on else ""
+
+
 def bar_chart(ax, summary, metric):
+    """One bar per configuration, coloured/hatched by sharing mode; the tick
+    label shows the config id and, below it, the features switched on."""
     x = range(len(summary))
     for i, (_, row) in enumerate(summary.iterrows()):
         color, hatch = MODE_STYLE[row["sharing_mode"]]
         ax.bar(i, row[f"{metric}_mean"], yerr=row[f"{metric}_std"], color=color,
                hatch=hatch, edgecolor="white", linewidth=0.8, width=0.75,
                error_kw={"elinewidth": 1, "capsize": 2, "ecolor": "#52514e"})
-    ax.set_xticks(list(x), summary["config_id"])
+    labels = [f"{row['config_id']}\n{feature_label(row)}"
+              for _, row in summary.iterrows()]
+    ax.set_xticks(list(x), labels)
+    ax.set_xlim(-0.6, len(summary) - 0.4)
     ax.set_title(SUMMARY_METRICS[metric], fontsize=10, color="#0b0b0b")
     ax.spines[["top", "right"]].set_visible(False)
     ax.spines[["left", "bottom"]].set_color("#b5b4ae")
-    ax.tick_params(colors="#52514e", labelsize=8)
+    ax.tick_params(colors="#52514e", labelsize=7.5)
+    ax.tick_params(axis="x", length=0)
     ax.grid(axis="y", color="#e6e5e0", linewidth=0.6)
     ax.set_axisbelow(True)
 
@@ -221,9 +242,11 @@ def legend_handles():
 def make_charts(summary, out_dir):
     charts = out_dir / "charts"
     charts.mkdir(parents=True, exist_ok=True)
-    note = "Bars: mean over seeds; error bars: standard deviation."
+    note = ("Bars: mean over seeds; error bars: standard deviation. Under each id: "
+            "features on (bus = buses, walk = walking, cong = congestion, "
+            "pat = patience).")
     for metric in CHART_METRICS:
-        fig, ax = plt.subplots(figsize=(7, 3.6))
+        fig, ax = plt.subplots(figsize=(10, 4))
         bar_chart(ax, summary, metric)
         ax.legend(handles=legend_handles(), fontsize=8, frameon=False,
                   loc="upper left", bbox_to_anchor=(1.0, 1.0))
@@ -232,19 +255,19 @@ def make_charts(summary, out_dir):
         fig.savefig(charts / f"{metric}.png", dpi=150)
         plt.close(fig)
 
-    fig, axes = plt.subplots(2, 4, figsize=(18, 7))
+    fig, axes = plt.subplots(2, 4, figsize=(24, 9.5))
     for ax, metric in zip(axes.flat, CHART_METRICS):
         bar_chart(ax, summary, metric)
     fig.legend(handles=legend_handles(), loc="upper center", ncol=3,
-               frameon=False, fontsize=9)
+               frameon=False, fontsize=10)
     fig.text(0.01, 0.01, note + f" Max extra delay fixed at "
-             f"{MAX_EXTRA_DELAY_MINUTES} min.", fontsize=8, color="#52514e")
-    fig.tight_layout(rect=(0, 0.03, 1, 0.94))
+             f"{MAX_EXTRA_DELAY_MINUTES} min.", fontsize=9, color="#52514e")
+    fig.tight_layout(rect=(0, 0.03, 1, 0.95), h_pad=2.5, w_pad=2)
     fig.savefig(charts / "comparison.png", dpi=150)
     plt.close(fig)
 
 
-def run(config_path="experiments.csv", seeds=(1, 2, 3, 4, 5), out="results",
+def run(config_path="experiments.csv", seeds=SEEDS, out="results",
         only=None, charts=True):
     out_dir = Path(out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -268,7 +291,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--config", default="experiments.csv")
-    parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3, 4, 5])
+    parser.add_argument("--seeds", type=int, nargs="+", default=list(SEEDS))
     parser.add_argument("--out", default="results")
     parser.add_argument("--only", nargs="+", help="config_id values to run")
     parser.add_argument("--no-charts", action="store_true")
@@ -276,14 +299,11 @@ def main():
 
     _, _, summary = run(args.config, args.seeds, args.out, args.only,
                         not args.no_charts)
-    columns = ["config_id", "sharing_mode", "capacity", "num_taxis",
-               "num_passengers", "arrival_mode", "completed_mean",
-               "completed_pct_mean", "avg_wait_completed_mean",
-               "avg_total_completed_mean", "avg_extra_delay_completed_mean",
-               "total_distance_mean", "empty_distance_pct_mean",
-               "avg_occupancy_mean", "distance_per_completed_mean",
-               "utilization_pct_mean"]
-    print(summary[columns].to_string(index=False, float_format="{:.1f}".format))
+    table = summary[["config_id", "sharing_mode", "capacity"]].copy()
+    table["features"] = [feature_label(row) or "-" for _, row in summary.iterrows()]
+    for metric in CHART_METRICS:
+        table[metric] = summary[f"{metric}_mean"]
+    print(table.to_string(index=False, float_format="{:.1f}".format))
     print(f"\nResults written to {Path(args.out).resolve()}")
 
 

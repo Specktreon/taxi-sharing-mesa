@@ -1,11 +1,13 @@
-config_id,description,num_taxis,num_passengers,capacity,sharing_mode,arrival_mode,arrival_window,duration,width,height
-C1,Baseline: single rides; all requests at start,5,40,1,none,all_at_start,60,60,20,20
-C2,Capacity 2 without route changes; all at start,5,40,2,no_detour,all_at_start,60,60,20,20
-C3,Capacity 2 with detours; all at start,5,40,2,detour,all_at_start,60,60,20,20
-C4,Baseline: single rides; gradual arrivals,5,60,1,none,gradual,90,120,20,20
-C5,Capacity 2 without route changes; gradual,5,60,2,no_detour,gradual,90,120,20,20
-C6,Capacity 2 with detours; gradual,5,60,2,detour,gradual,90,120,20,20
-C7,Larger fleet; single rides; gradual,10,60,1,none,gradual,90,120,20,20
-C8,Larger fleet; detours; gradual,10,60,2,detour,gradual,90,120,20,20
-C9,High demand; single rides; gradual,5,100,1,none,gradual,90,120,20,20
-C10,High demand; detours; gradual,5,100,2,detour,gradual,90,120,20,20
+config_id,description,num_taxis,num_passengers,capacity,sharing_mode,buses,walking,congestion,patience
+S1,Single rides (no sharing),20,90,1,none,False,False,False,False
+S2,Sharing on the planned route (capacity 2),20,90,2,no_detour,False,False,False,False
+S3,Sharing with detours (capacity 2),20,90,2,detour,False,False,False,False
+S4,Sharing with detours (capacity 4),20,90,4,detour,False,False,False,False
+S5,S4 + walking to a neighbour district,20,90,4,detour,False,True,False,False
+S6,S4 + buses,20,90,4,detour,True,False,False,False
+S7,S1 + buses,20,90,1,none,True,False,False,False
+S8,S4 + congestion,20,90,4,detour,False,False,True,False
+S9,S1 + congestion,20,90,1,none,False,False,True,False
+S10,S4 + patience,20,90,4,detour,False,False,False,True
+S11,S1 + patience,20,90,1,none,False,False,False,True
+S12,S4 + all four features,20,90,4,detour,True,True,True,True

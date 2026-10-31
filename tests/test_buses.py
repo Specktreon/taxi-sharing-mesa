@@ -1,17 +1,13 @@
 """Optional buses: lines, mode choice, bus journeys and capacity."""
 
-from pathlib import Path
-
 import pandas as pd
 import pytest
 
-import run_experiments
 from agents import BUS, COMPLETED, TAXI
 from buses import choose_bus_trip, make_bus_lines
 from config import BUS_CAPACITY, BUSES_PER_LINE
-from helpers import check_invariants, legacy_model, make_model, run
-
-ROOT = Path(__file__).resolve().parent.parent
+from helpers import (assert_reproduces_stored, check_invariants, legacy_model,
+                     make_model, run)
 GRID = {"width": 20, "height": 20}
 
 
@@ -103,16 +99,16 @@ def test_invariants_with_buses_and_all_features(mode, capacity):
     assert all(p.status != "abandoned" for p in m.passengers if p.mode == BUS)
 
 
-def test_buses_off_reproduces_results(tmp_path):
-    """An explicit buses = False column reproduces every stored value."""
-    configs = pd.read_csv(ROOT / "experiments.csv")
-    configs["buses"] = False
-    config = tmp_path / "configs.csv"
-    configs.to_csv(config, index=False)
-    out = tmp_path / "out"
-    run_experiments.run(config, out=out, charts=False)
-    for name in ["runs.csv", "summary.csv", "passengers.csv"]:
-        stored = pd.read_csv(ROOT / "results" / name)
-        fresh = pd.read_csv(out / name)
-        pd.testing.assert_frame_equal(fresh[stored.columns], stored,
-                                      check_exact=True, obj=name)
+def test_all_features_off_explicitly_reproduces_results(tmp_path):
+    """Every feature switched off with explicit raw model columns (buses,
+    walk_radius, congestion, patience_max) reproduces the stored S1-S4 values
+    (seeds 1-2)."""
+    def explicit_off(configs):
+        configs = configs.drop(columns=["walking", "patience"])
+        configs["buses"] = False
+        configs["walk_radius"] = 0
+        configs["congestion"] = "off"
+        configs["patience_max"] = None
+        return configs
+
+    assert_reproduces_stored(tmp_path, edit=explicit_off, seeds=[1, 2])

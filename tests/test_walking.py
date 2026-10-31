@@ -1,33 +1,24 @@
 """Optional walking to a neighbouring district, and grid size."""
 
-from pathlib import Path
-
-import pandas as pd
 import pytest
 
 import run_experiments
 from agents import ASSIGNED, COMPLETED, WAITING
-from helpers import legacy_model, make_model, run
+from helpers import assert_reproduces_stored, legacy_model, make_model, run
 from routing import congestion_factor
 
-ROOT = Path(__file__).resolve().parent.parent
 
+def test_walk_off_and_grid_30_reproduce_results(tmp_path):
+    """Explicit raw columns walk_radius 0 (no "walking" column) and a 30x30
+    grid reproduce the stored S1-S4 values (seeds 1-2)."""
+    def explicit_off(configs):
+        configs = configs.drop(columns="walking")
+        configs["walk_radius"] = 0
+        configs["walk_minutes_per_district"] = 3
+        configs["width"] = configs["height"] = 30
+        return configs
 
-def test_walk_off_and_grid_20_reproduce_results(tmp_path):
-    """Explicit walk_radius 0 and a 20x20 grid reproduce every stored value."""
-    configs = pd.read_csv(ROOT / "experiments.csv")
-    configs["walk_radius"] = 0
-    configs["walk_minutes_per_district"] = 3
-    configs["width"] = configs["height"] = 20
-    config = tmp_path / "configs.csv"
-    configs.to_csv(config, index=False)
-    out = tmp_path / "out"
-    run_experiments.run(config, out=out, charts=False)
-    for name in ["runs.csv", "summary.csv", "passengers.csv"]:
-        stored = pd.read_csv(ROOT / "results" / name)
-        fresh = pd.read_csv(out / name)
-        pd.testing.assert_frame_equal(fresh[stored.columns], stored,
-                                      check_exact=True, obj=name)
+    assert_reproduces_stored(tmp_path, edit=explicit_off, seeds=[1, 2])
 
 
 def two_riders(walk_radius):
