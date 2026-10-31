@@ -46,7 +46,8 @@ OPTIONAL_COLUMNS = {"boarding_minutes": BOARDING_MINUTES,
                     "walk_radius": DEFAULTS["walk_radius"],
                     "walk_minutes_per_district": WALK_MINUTES_PER_DISTRICT,
                     "width": DEFAULTS["width"],
-                    "height": DEFAULTS["height"]}
+                    "height": DEFAULTS["height"],
+                    "buses": DEFAULTS["buses"]}
 PARAM_COLUMNS = CONFIG_COLUMNS + list(OPTIONAL_COLUMNS)
 
 # Metrics summarised across seeds (label used in charts).
@@ -68,6 +69,15 @@ SUMMARY_METRICS = {
     "avg_wait_censored": "Avg waiting incl. unserved (min)",
     "walked_pct": "Completed passengers who walked (%)",
     "avg_walk_minutes": "Avg walking time, completed (min)",
+    "bus_share_pct": "Passengers taking the bus (%)",
+    "completed_pct_taxi": "Completed, taxi passengers (%)",
+    "completed_pct_bus": "Completed, bus passengers (%)",
+    "avg_wait_completed_taxi": "Avg waiting time, taxi, completed (min)",
+    "avg_wait_completed_bus": "Avg waiting time, bus, completed (min)",
+    "avg_total_completed_taxi": "Avg total journey time, taxi, completed (min)",
+    "avg_total_completed_bus": "Avg total journey time, bus, completed (min)",
+    "bus_distance": "Bus distance (districts)",
+    "avg_bus_occupancy": "Avg bus occupancy (passenger / bus distance)",
     "total_distance": "Total taxi distance (districts)",
     "empty_distance": "Empty taxi distance (districts)",
     "occupied_distance": "Occupied taxi distance (districts)",

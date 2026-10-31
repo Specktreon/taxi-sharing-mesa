@@ -24,6 +24,12 @@ DROPPING_OFF = "dropping_off"  # stopped: a passenger is alighting
 PICKUP = "pickup"
 DROPOFF = "dropoff"
 
+# Passenger travel modes (chosen once, at creation)
+TAXI = "taxi"
+BUS = "bus"
+# Stages of a bus journey (status stays WAITING until boarding, TRAVELLING after)
+TO_STOP, AT_STOP, RIDING, TO_DESTINATION = "to_stop", "at_stop", "riding", "to_destination"
+
 
 def stop_district(stop):
     """District where a (kind, passenger) stop takes place."""
@@ -38,12 +44,23 @@ class PassengerAgent(mesa.Agent):
     district (boarding starts); arrival_time = minute alighting at the
     destination ends. The pickup district is the origin, or with walking an
     adjacent district the passenger walks to after its CONFIRM.
+
+    A bus passenger (mode BUS, see buses.py) walks to its boarding stop, waits,
+    rides, then walks to its destination: pickup_time = boarding minute,
+    alight_time = end of alighting, arrival_time = end of the final walk. It
+    never contacts taxis and has no patience.
     """
 
-    def __init__(self, model, origin, destination, request_time, patience=None):
+    def __init__(self, model, origin, destination, request_time, patience=None,
+                 bus_trip=None):
         super().__init__(model)
         self.origin = origin
         self.destination = destination
+        self.mode = TAXI if bus_trip is None else BUS
+        self.bus_line, self.board_stop, self.alight_stop = bus_trip or (None,) * 3
+        self.bus_stage = None if bus_trip is None else TO_STOP
+        self.bus = None
+        self.alight_time = None
         self.pickup_district = origin
         self.walk_progress = 0  # minutes walked towards the next district
         self.request_time = request_time
@@ -65,7 +82,10 @@ class PassengerAgent(mesa.Agent):
         """Baseline: boarding + direct x-first drive (with congestion costs)
         from the pickup district + alighting, alone, without waiting. A solo
         direct trip therefore has extra delay 0. Measured from the pickup
-        district, so walking (the passenger's choice) is not extra delay."""
+        district, so walking (the passenger's choice) is not extra delay.
+        None for bus passengers (no direct-ride baseline)."""
+        if self.mode == BUS:
+            return None
         district = self.pickup_district
         if district not in self._individual:
             self._individual[district] = (
@@ -76,9 +96,15 @@ class PassengerAgent(mesa.Agent):
 
     @property
     def walk_minutes(self):
-        """Minutes needed to walk from the origin to the pickup district."""
-        return (manhattan(self.origin, self.pickup_district)
-                * self.model.walk_minutes_per_district)
+        """Minutes of walking in the trip: origin -> pickup district for a
+        taxi passenger; origin -> boarding stop plus alighting stop ->
+        destination for a bus passenger."""
+        if self.mode == BUS:
+            districts = (manhattan(self.origin, self.board_stop)
+                         + manhattan(self.alight_stop, self.destination))
+        else:
+            districts = manhattan(self.origin, self.pickup_district)
+        return districts * self.model.walk_minutes_per_district
 
     @property
     def walking(self):
@@ -95,10 +121,12 @@ class PassengerAgent(mesa.Agent):
 
     @property
     def in_vehicle_time(self):
-        """Minutes from pickup (boarding starts) to arrival (alighting ends)."""
+        """Minutes from pickup (boarding starts) to the end of alighting (for
+        a taxi passenger that is the arrival)."""
         if self.arrival_time is None:
             return None
-        return self.arrival_time - self.pickup_time
+        end = self.alight_time if self.mode == BUS else self.arrival_time
+        return end - self.pickup_time
 
     @property
     def total_time(self):
@@ -109,15 +137,15 @@ class PassengerAgent(mesa.Agent):
 
     @property
     def extra_delay(self):
-        """Actual in-vehicle time minus the individual trip time."""
-        if self.arrival_time is None:
+        """Actual in-vehicle time minus the individual trip time (taxi only)."""
+        if self.arrival_time is None or self.mode == BUS:
             return None
         return self.in_vehicle_time - self.individual_time
 
     # --- Messaging phases (called by the model through AgentSet.do) ---
     def send_requests(self):
         """Phase 1: broadcast a call for proposals to every taxi."""
-        if self.status != WAITING:
+        if self.status != WAITING or self.mode != TAXI:
             return
         for taxi in self.model.taxis:
             self.model.send(
@@ -162,16 +190,46 @@ class PassengerAgent(mesa.Agent):
         self.inbox.clear()
 
     def walk(self):
-        """Phase 5b: a confirmed passenger with another pickup district walks
-        there, one district per walk_minutes_per_district (no congestion),
-        then waits. Taxis only offer pickups the walker reaches first."""
-        if not self.walking:
+        """Phase 5b: walk one minute, one district per
+        walk_minutes_per_district (no congestion). A confirmed taxi passenger
+        walks to its neighbouring pickup district (taxis only offer pickups the
+        walker reaches first); a bus passenger walks to its boarding stop, or
+        from its alighting stop to its destination."""
+        if self.mode == BUS:
+            target = {TO_STOP: self.board_stop,
+                      TO_DESTINATION: self.destination}.get(self.bus_stage)
+        else:
+            target = self.pickup_district if self.walking else None
+        if target is None:
             return
         self.walk_progress += 1
         if self.walk_progress >= self.model.walk_minutes_per_district:
             self.walk_progress = 0
-            self.model.grid.move_agent(self, step_towards(self.pos,
-                                                          self.pickup_district))
+            self.model.grid.move_agent(self, step_towards(self.pos, target))
+            if self.mode == BUS and self.pos == target:
+                self.reach_bus_target(self.model.minute + 1)
+
+    # --- Bus journey ---
+    def reach_bus_target(self, minute):
+        """At the boarding stop: queue there. At the destination: done."""
+        if self.bus_stage == TO_STOP:
+            self.bus_stage = AT_STOP
+            self.bus_line.waiting[self.board_stop].append(self)
+        else:
+            self.alight(minute)
+
+    def board_bus(self, bus, minute):
+        self.status = TRAVELLING
+        self.bus_stage = RIDING
+        self.bus = bus
+        self.pickup_time = minute
+
+    def leave_bus(self, minute):
+        """Alighting finished: walk on to the destination (if not there)."""
+        self.alight_time = minute
+        self.bus_stage = TO_DESTINATION
+        if self.pos == self.destination:
+            self.alight(minute)
 
     # --- Events triggered by the taxi ---
     def board(self, taxi, minute):
@@ -179,7 +237,9 @@ class PassengerAgent(mesa.Agent):
         self.pickup_time = minute
 
     def alight(self, minute):
+        """Trip finished (taxi drop-off, or a bus passenger's final walk)."""
         self.status = COMPLETED
+        self.bus_stage = None
         self.arrival_time = minute
         self.model.grid.remove_agent(self)
 

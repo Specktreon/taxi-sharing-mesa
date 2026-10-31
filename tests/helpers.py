@@ -29,12 +29,21 @@ def check_invariants(model):
                 seen_pickups.add(p)
             else:
                 assert p in seen_pickups
+    for bus in model.buses:
+        assert len(bus.onboard) <= bus.capacity
+        assert bus.pos == bus.line.cells[bus.index]
+        for p in bus.onboard:
+            assert p.mode == "bus" and p.pos == bus.pos
+            assert p.status in (TRAVELLING, NOT_COMPLETED)
     for p in model.passengers:
+        if p.mode == "bus":
+            assert p.taxi is None and p.patience is None
         if p.status == COMPLETED:
             assert p.pickup_time is not None
             assert p.request_time <= p.pickup_time <= p.arrival_time <= model.duration
             assert p.pos is None  # removed from the grid
-            assert p.extra_delay <= model.max_extra_delay
+            if p.mode == "taxi":
+                assert p.extra_delay <= model.max_extra_delay
         if p.status in (WAITING, ASSIGNED):
             assert p.pickup_time is None
         if p.status == ABANDONED:

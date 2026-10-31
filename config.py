@@ -37,6 +37,17 @@ RING_FACTOR = 2
 WALK_RADII = (0, 1)
 WALK_MINUTES_PER_DISTRICT = 3
 
+# Buses (parameter `buses`, default off): two horizontal lines (rows h//3 and
+# 2h//3) and two vertical lines (columns w//3 and 2w//3), driven back and forth
+# at taxi speed (congestion applies). Stops every BUS_STOP_SPACING districts,
+# including both ends. A passenger takes the bus when one line has a stop
+# within BUS_WALK_MAX districts of its origin and a different stop within
+# BUS_WALK_MAX of its destination (no transfers); otherwise it calls a taxi.
+BUSES_PER_LINE = 3
+BUS_CAPACITY = 10
+BUS_STOP_SPACING = 3
+BUS_WALK_MAX = 2
+
 # Allowed taxi capacities (seats).
 CAPACITIES = (1, 2, 3, 4)
 
@@ -75,5 +86,6 @@ DEFAULTS = {
     "duration": 60,
     "congestion": "off",
     "walk_radius": 0,
+    "buses": False,
     "seed": 1,
 }

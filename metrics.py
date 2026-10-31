@@ -30,6 +30,17 @@ waiting time (pickup - request) includes the walk. walked_pct = % of
 completed passengers who walked; avg_walk_minutes = mean walking minutes over
 completed passengers (0 for those who did not walk).
 
+Buses (optional): bus passengers count in every passenger metric (created,
+completed, waiting, total time...). Their waiting time = boarding minute -
+request (includes the walk to the stop); in-vehicle = boarding to end of
+alighting; total = request to the end of the walk to the destination. Extra
+delay has no bus baseline, so the extra-delay metrics (and acceptable_pct's
+delay condition) only concern taxi passengers. _taxi / _bus suffixes split
+completed_pct, avg_wait_completed and avg_total_completed by mode (NaN when a
+mode has no passengers). Taxi distances (total_distance, ...) stay taxis
+only; bus_distance counts districts driven by buses and avg_bus_occupancy =
+bus passenger-districts / bus_distance.
+
 Distances are counted in districts driven. total = empty + occupied, where
 "empty" means no passenger on board. passenger_distance sums, over passengers,
 the districts each one rode (passenger-km); avg_occupancy =
@@ -39,8 +50,8 @@ are simple proxies for vehicle travel, not measured pollution or congestion.
 
 import math
 
-from agents import (ABANDONED, ASSIGNED, COMPLETED, NOT_COMPLETED, TRAVELLING,
-                    WAITING)
+from agents import (ABANDONED, ASSIGNED, BUS, COMPLETED, NOT_COMPLETED, TAXI,
+                    TRAVELLING, WAITING)
 
 MODEL_METRICS = [
     "minute",
@@ -64,6 +75,15 @@ MODEL_METRICS = [
     "avg_wait_censored",
     "walked_pct",
     "avg_walk_minutes",
+    "bus_share_pct",
+    "completed_pct_taxi",
+    "completed_pct_bus",
+    "avg_wait_completed_taxi",
+    "avg_wait_completed_bus",
+    "avg_total_completed_taxi",
+    "avg_total_completed_bus",
+    "bus_distance",
+    "avg_bus_occupancy",
     "total_distance",
     "empty_distance",
     "occupied_distance",
@@ -78,6 +98,7 @@ MODEL_METRICS = [
 
 PASSENGER_REPORTERS = {
     "passenger_id": "unique_id",
+    "mode": "mode",
     "origin": lambda p: f"{p.origin[0]};{p.origin[1]}",
     "destination": lambda p: f"{p.destination[0]};{p.destination[1]}",
     "pickup_district": lambda p: f"{p.pickup_district[0]};{p.pickup_district[1]}",
@@ -110,8 +131,10 @@ def compute(model):
     passengers = model.passengers
     status = [p.status for p in passengers]
     done = [p for p in passengers if p.status == COMPLETED]
+    taxi_done = [p for p in done if p.mode == TAXI]  # extra delay is taxi-only
     shared_done = [p for p in done if p.shared]
     created = len(passengers)
+    bus_distance = sum(b.distance for b in model.buses)
     taxi_minutes = len(model.taxis) * model.minute
     total_distance = sum(t.distance for t in model.taxis)
     empty_distance = sum(t.empty_distance for t in model.taxis)
@@ -127,9 +150,19 @@ def compute(model):
     acceptable = [
         p for p in done
         if (p.patience is None or p.waiting_time <= p.patience)
-        and p.extra_delay <= model.max_extra_delay
+        and (p.extra_delay is None or p.extra_delay <= model.max_extra_delay)
     ]
     abandoned = status.count(ABANDONED)
+
+    by_mode = {}
+    for mode in (TAXI, BUS):
+        mode_all = [p for p in passengers if p.mode == mode]
+        mode_done = [p for p in done if p.mode == mode]
+        by_mode[f"completed_pct_{mode}"] = (
+            100 * len(mode_done) / len(mode_all) if mode_all else math.nan
+        )
+        by_mode[f"avg_wait_completed_{mode}"] = mean(p.waiting_time for p in mode_done)
+        by_mode[f"avg_total_completed_{mode}"] = mean(p.total_time for p in mode_done)
 
     return {
         "minute": model.minute,
@@ -148,16 +181,26 @@ def compute(model):
         "avg_wait_completed": mean(p.waiting_time for p in done),
         "avg_in_vehicle_completed": mean(p.in_vehicle_time for p in done),
         "avg_total_completed": mean(p.total_time for p in done),
-        "avg_extra_delay_completed": mean(p.extra_delay for p in done),
+        "avg_extra_delay_completed": mean(p.extra_delay for p in taxi_done),
         "shared_completed": len(shared_done),
         "avg_extra_delay_shared": mean(p.extra_delay for p in shared_done),
-        "max_extra_delay": max((p.extra_delay for p in done), default=math.nan),
+        "max_extra_delay": max((p.extra_delay for p in taxi_done), default=math.nan),
         "avg_wait_censored": mean(censored_wait(p) for p in passengers),
         "walked_pct": (
-            100 * sum(p.pickup_district != p.origin for p in done) / len(done)
+            100 * sum(p.walk_minutes > 0 for p in done) / len(done)
             if done else math.nan
         ),
         "avg_walk_minutes": mean(p.walk_minutes for p in done),
+        "bus_share_pct": (
+            100 * sum(p.mode == BUS for p in passengers) / created
+            if created else math.nan
+        ),
+        **by_mode,
+        "bus_distance": bus_distance,
+        "avg_bus_occupancy": (
+            sum(b.passenger_distance for b in model.buses) / bus_distance
+            if bus_distance else math.nan
+        ),
         "total_distance": total_distance,
         "empty_distance": empty_distance,
         "occupied_distance": sum(t.occupied_distance for t in model.taxis),

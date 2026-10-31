@@ -15,6 +15,7 @@ from agents import (
     PassengerAgent,
     TaxiAgent,
 )
+from buses import BusAgent, choose_bus_trip, initial_positions, make_bus_lines
 from config import (
     ARRIVAL_MODES,
     BOARDING_MINUTES,
@@ -74,7 +75,9 @@ class TaxiModel(mesa.Model):
            a neighbouring district walk towards it
         6. taxis spend one minute driving towards the next district (entering
            it takes cell_minutes[district]) or boarding/alighting
-           (boarding_minutes at every pickup and drop-off)
+           (boarding_minutes at every pickup and drop-off); then buses, if
+           on, drive or stand at a stop (see buses.py). Bus passengers walk
+           in phase 5 and never send taxi messages.
         7. clock advances; passengers still WAITING after their patience
            ABANDON; at the deadline unfinished passengers are marked
            NOT_COMPLETED and the model stops; metrics are collected
@@ -94,6 +97,7 @@ class TaxiModel(mesa.Model):
         congestion=DEFAULTS["congestion"],
         walk_radius=DEFAULTS["walk_radius"],
         walk_minutes_per_district=WALK_MINUTES_PER_DISTRICT,
+        buses=DEFAULTS["buses"],
         minutes_per_district=MINUTES_PER_DISTRICT,
         boarding_minutes=BOARDING_MINUTES,
         patience_min=PATIENCE_MIN,
@@ -136,6 +140,7 @@ class TaxiModel(mesa.Model):
         self.congestion = congestion
         self.walk_radius = int(walk_radius)  # also accepts a UI checkbox bool
         self.walk_minutes_per_district = int(walk_minutes_per_district)
+        self.buses_on = bool(buses)
         # Minutes needed to enter each district (integer: one step = 1 minute).
         self.cell_minutes = {
             (x, y): minutes_per_district
@@ -182,6 +187,13 @@ class TaxiModel(mesa.Model):
             self.grid.place_agent(taxi, cell)
             self.taxis.append(taxi)
             self.agent_by_id[taxi.unique_id] = taxi
+        self.bus_lines = make_bus_lines(width, height) if self.buses_on else []
+        self.buses = []
+        for line in self.bus_lines:
+            for index, direction in initial_positions(line):
+                bus = BusAgent(self, line, index, direction)
+                self.grid.place_agent(bus, line.cells[index])
+                self.buses.append(bus)
 
         self.datacollector = mesa.DataCollector(
             model_reporters={
@@ -209,10 +221,17 @@ class TaxiModel(mesa.Model):
 
     # --- Simulation loop ---
     def spawn_due_passengers(self):
+        """Create due passengers. With buses on, each chooses its mode once
+        here: the bus if a line serves both ends (see buses.choose_bus_trip),
+        otherwise a taxi. Patience only applies to taxi passengers."""
         while self.pending_requests and self.pending_requests[0][0] <= self.minute:
             minute, origin, destination, patience = self.pending_requests.pop(0)
-            passenger = PassengerAgent(self, origin, destination, minute, patience)
+            trip = choose_bus_trip(self.bus_lines, origin, destination)
+            passenger = PassengerAgent(self, origin, destination, minute,
+                                       None if trip else patience, trip)
             self.grid.place_agent(passenger, origin)
+            if trip and origin == passenger.board_stop:
+                passenger.reach_bus_target(minute)  # already at the stop
             self.passengers.append(passenger)
             self.agent_by_id[passenger.unique_id] = passenger
 
@@ -230,6 +249,9 @@ class TaxiModel(mesa.Model):
             passengers.do("read_replies")
             passengers.do("walk")
         taxis.do("move")
+        buses = self.agents_by_type.get(BusAgent)
+        if buses is not None:
+            buses.do("move")
 
         self.minute += 1
         self.abandon_impatient()
