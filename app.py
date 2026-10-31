@@ -14,11 +14,11 @@ import solara
 from matplotlib import patheffects
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
-from matplotlib.patches import Patch, Rectangle
+from matplotlib.patches import FancyBboxPatch, Patch, Rectangle
 from mesa.visualization import SolaraViz
 
-from agents import (ABANDONED, ASSIGNED, NOT_COMPLETED, PICKUP, WAITING,
-                    stop_district)
+from agents import (ABANDONED, ASSIGNED, AT_STOP, BUS, NOT_COMPLETED, PICKUP,
+                    RIDING, TRAVELLING, WAITING, stop_district)
 from config import (CAPACITIES, CENTER_FACTOR, DEFAULTS, MAX_EXTRA_DELAY_MINUTES,
                     RING_FACTOR, SHARING_MODES, feature_params)
 from model import TaxiModel
@@ -38,6 +38,9 @@ ABANDONED_COLOR = "#8d6e63"  # brown ring: gave up waiting
 WALK_COLOR = "#00897b"  # teal diamond + arrow: walking to the pickup district
 RING_SHADE = "#fff1dc"  # congestion ring (light)
 CENTER_SHADE = "#fde0b8"  # congested centre (a little darker)
+# One colour per bus line, distinct from the taxi and passenger colours.
+BUS_LINE_COLORS = {"H1": "#d81b60", "H2": "#5e35b1", "V1": "#00838f",
+                   "V2": "#9e9d24"}
 TEXT_OUTLINE = [patheffects.withStroke(linewidth=2.2, foreground="white")]
 
 
@@ -59,18 +62,124 @@ class UITaxiModel(TaxiModel):
                          seed=seed, **feature_params(**self.features))
 
 
+def active_features(model):
+    """Which of the four features a model runs with."""
+    return {"Buses": model.buses_on, "Walking": bool(model.walk_radius),
+            "Congestion": model.congestion != "off",
+            "Patience": model.patience_max is not None}
+
+
+def draw_zones(ax, model):
+    """Congestion zones: the ring rectangle first, the centre on top."""
+    x0, y0, size_x, size_y = congestion_center(model.width, model.height)
+    for pad, color in ((1, RING_SHADE), (0, CENTER_SHADE)):
+        ax.add_patch(Rectangle((x0 - pad - 0.5, y0 - pad - 0.5),
+                               size_x + 2 * pad, size_y + 2 * pad,
+                               facecolor=color, edgecolor="none", zorder=0))
+
+
+def draw_bus_network(ax, model):
+    """Bus lines as wide light roads, stops as small square signs on them,
+    buses as rounded boxes along their line with "on board/capacity"."""
+    for line in model.bus_lines:
+        color = BUS_LINE_COLORS[line.name]
+        xs, ys = zip(*line.cells)
+        ax.plot(xs, ys, color=color, alpha=0.22, linewidth=7.5,
+                solid_capstyle="butt", zorder=1)
+        sx, sy = zip(*line.stop_index)
+        ax.scatter(sx, sy, marker="s", s=13, facecolors="white",
+                   edgecolors=color, linewidths=1.0, zorder=2)
+    for bus in model.buses:
+        color = BUS_LINE_COLORS[bus.line.name]
+        x, y = bus.pos
+        horizontal = bus.line.name.startswith("H")
+        bw, bh = (1.5, 0.72) if horizontal else (0.72, 1.5)
+        # Below the taxis (zorder 5), so a taxi in the same district stays visible.
+        ax.add_patch(FancyBboxPatch((x - bw / 2, y - bh / 2), bw, bh,
+                                    boxstyle="round,pad=0,rounding_size=0.28",
+                                    facecolor=color, edgecolor="#222222",
+                                    linewidth=0.7, zorder=4.5))
+        ax.text(x, y, f"{len(bus.onboard)}/{bus.capacity}", fontsize=5,
+                color="white", fontweight="bold", ha="center", va="center",
+                rotation=0 if horizontal else 90, zorder=4.6)
+
+
+def legend_handles(model):
+    """Legend entries grouped in sections; only active sections are shown.
+    Returns (handles, section titles)."""
+    feats = active_features(model)
+    sections = {"Taxis": [
+        Line2D([], [], marker="s", ls="", color=c, markeredgecolor="black",
+               markersize=7, label=f"{s.replace('_', ' ')}")
+        for s, c in TAXI_COLORS.items()
+    ] + [
+        Line2D([], [], color="#777777", linewidth=1.4, alpha=0.7,
+               label="planned route (taxi colour)"),
+        Line2D([], [], marker="^", ls="", color="#bbbbbb", markeredgecolor="#333333",
+               label="planned pickup"),
+        Line2D([], [], marker="v", ls="", color="#bbbbbb", markeredgecolor="#333333",
+               label="planned drop-off"),
+    ]}
+    if feats["Buses"]:
+        sections["Buses"] = [
+            Line2D([], [], color=c, alpha=0.35, linewidth=6, label=f"line {name}")
+            for name, c in BUS_LINE_COLORS.items()
+        ] + [
+            Line2D([], [], marker="s", ls="", markerfacecolor="white",
+                   markeredgecolor="#555555", markersize=5, label="bus stop"),
+            Patch(facecolor="#777777", edgecolor="#222222",
+                  label="bus (on board / 10)"),
+        ]
+    passengers = [
+        Line2D([], [], marker="o", ls="", color=WAITING_COLOR,
+               markeredgecolor="#333333", label="taxi: waiting, no taxi yet"),
+        Line2D([], [], marker="o", ls="", color=ASSIGNED_COLOR,
+               markeredgecolor="#333333", label="taxi: taxi assigned"),
+    ]
+    if feats["Walking"]:
+        passengers.append(Line2D([], [], marker="D", ls="--", color=WALK_COLOR,
+                                 markeredgecolor="#333333", markersize=5,
+                                 label="taxi: walking to pickup"))
+    if feats["Buses"]:
+        passengers += [
+            Line2D([], [], marker="p", ls="", color="#777777",
+                   markeredgecolor="#222222", markersize=7,
+                   label="bus: waiting at stop (line colour)"),
+            Line2D([], [], marker="p", ls="", markerfacecolor="white",
+                   markeredgecolor="#555555", markersize=7, label="bus: walking"),
+        ]
+    if feats["Patience"]:
+        passengers.append(Line2D([], [], marker="o", ls="", markerfacecolor="none",
+                                 markeredgecolor=ABANDONED_COLOR, markeredgewidth=1.3,
+                                 label="abandoned (at origin)"))
+    passengers.append(Line2D([], [], marker="x", ls="", color="black",
+                             label="not completed (deadline)"))
+    sections["Passengers"] = passengers
+    if feats["Congestion"]:
+        sections["Zones"] = [
+            Patch(facecolor=CENTER_SHADE, label=f"congestion x{CENTER_FACTOR} (centre)"),
+            Patch(facecolor=RING_SHADE, label=f"congestion x{RING_FACTOR} (ring)"),
+        ]
+    handles, titles = [], []
+    for title, entries in sections.items():
+        header = Line2D([], [], ls="", marker="", label=title)
+        handles += [header] + entries
+        titles.append(title)
+    return handles, titles
+
+
 def draw_city(model, fig=None):
     """Draw the city grid from the model with matplotlib.
 
     A custom drawing (instead of Mesa's make_space_component) because the
-    taxis' planned routes and stops come from the model, not from single
-    agents. Layers: congestion zones (when on), district grid, planned
-    routes, planned stops, waiting
-    passengers (one marker per district with a count), abandoned passengers
-    (at their origin), taxis with an "on board / capacity" label.
+    taxis' planned routes and stops, and the bus lines, come from the model,
+    not from single agents. Layers: congestion zones, district grid, bus
+    roads and stops, planned taxi routes and stops, passengers outside
+    vehicles, buses, taxis. A box above the map lists the active features;
+    the legend shows only the sections that are active.
     """
-    # Wide aspect (~0.56) so the whole grid fits one panel of Mesa's dashboard.
-    fig = fig or Figure(figsize=(8.6, 4.8), layout="constrained")
+    # Square map plus a legend column; sized for one dashboard panel.
+    fig = fig or Figure(figsize=(9.6, 7.0), layout="constrained")
     ax = fig.add_subplot()
     w, h = model.width, model.height
     ax.set_xlim(-0.5, w - 0.5)
@@ -80,20 +189,24 @@ def draw_city(model, fig=None):
     ax.set_yticks(range(0, h, 5))
     ax.set_xticks(np.arange(-0.5, w, 1), minor=True)
     ax.set_yticks(np.arange(-0.5, h, 1), minor=True)
-    ax.grid(which="minor", color="#e8e8e8", linewidth=0.6)
+    ax.grid(which="minor", color="#ececec", linewidth=0.5)
     ax.tick_params(which="both", length=0, labelsize=7, colors="#777777")
     for spine in ax.spines.values():
         spine.set_color("#cccccc")
     status = "running" if model.running else "finished"
-    ax.set_title(f"Minute {model.minute} / {model.duration} ({status})", fontsize=11)
+    ax.set_title(f"Minute {model.minute} / {model.duration} ({status})",
+                 fontsize=11, pad=22)
+    features = " · ".join(f"{name} {'on' if on else 'off'}"
+                          for name, on in active_features(model).items())
+    ax.text(0.5, 1.012, features, transform=ax.transAxes, ha="center",
+            va="bottom", fontsize=8, color="#333333",
+            bbox={"boxstyle": "round,pad=0.3", "facecolor": "#f5f5f2",
+                  "edgecolor": "#cccccc", "linewidth": 0.6})
 
-    # Congestion zones: the ring square first, the centre square on top.
     if model.congestion != "off":
-        x0, y0, size_x, size_y = congestion_center(w, h)
-        for pad, color in ((1, RING_SHADE), (0, CENTER_SHADE)):
-            ax.add_patch(Rectangle((x0 - pad - 0.5, y0 - pad - 0.5),
-                                   size_x + 2 * pad, size_y + 2 * pad,
-                                   facecolor=color, edgecolor="none", zorder=0))
+        draw_zones(ax, model)
+    if model.buses_on:
+        draw_bus_network(ax, model)
 
     # Planned routes and stops, in the colour of the taxi's state.
     pickups, dropoffs = [], []
@@ -117,10 +230,18 @@ def draw_city(model, fig=None):
     groups = Counter()
     gave_up = Counter()
     walkers = []
+    bus_waiting = Counter()  # (stop, line name) -> passengers queued there
+    bus_walkers = []
     for p in model.passengers:
         if p.status == ABANDONED:
             gave_up[p.origin] += 1  # left the grid; marked where they waited
             continue
+        if p.mode == BUS and p.status in (WAITING, TRAVELLING):
+            if p.bus_stage == AT_STOP:
+                bus_waiting[(p.pos, p.bus_line.name)] += 1
+            elif p.bus_stage != RIDING:
+                bus_walkers.append((p.pos, p.bus_line.name))
+            continue  # riders are drawn inside their bus (its count)
         if p.walking:
             walkers.append((p.pos, p.pickup_district))
             continue
@@ -168,6 +289,17 @@ def draw_city(model, fig=None):
             if count > 1:
                 ax.text(x - 0.28, y - 0.62, str(count), fontsize=6, ha="center",
                         va="center", zorder=6, path_effects=TEXT_OUTLINE)
+    # Bus passengers: pentagons in their line colour, beside the road.
+    for ((x, y), name), count in bus_waiting.items():
+        ax.scatter(x + 0.32, y - 0.32, marker="p", s=42 if count == 1 else 80,
+                   c=BUS_LINE_COLORS[name], edgecolors="#222222", linewidths=0.6,
+                   zorder=4)
+        if count > 1:
+            ax.text(x + 0.32, y - 0.32, str(count), fontsize=5.5, color="white",
+                    fontweight="bold", ha="center", va="center", zorder=6)
+    for (x, y), name in bus_walkers:
+        ax.scatter(x + 0.32, y - 0.32, marker="p", s=38, facecolors="white",
+                   edgecolors=BUS_LINE_COLORS[name], linewidths=1.2, zorder=4)
 
     # Taxis: square in the state colour, label "on board / capacity".
     if model.taxis:
@@ -181,39 +313,17 @@ def draw_city(model, fig=None):
                     fontsize=6.5, ha="left", va="top", zorder=6,
                     path_effects=TEXT_OUTLINE)
 
-    handles = [
-        Line2D([], [], marker="s", ls="", color=c, markeredgecolor="black",
-               markersize=8, label=f"taxi: {s.replace('_', ' ')}")
-        for s, c in TAXI_COLORS.items()
-    ] + [
-        Line2D([], [], color="#777777", linewidth=1.4, alpha=0.7,
-               label="planned route (taxi colour)"),
-        Line2D([], [], marker="^", ls="", color="#bbbbbb", markeredgecolor="#333333",
-               label="planned pickup"),
-        Line2D([], [], marker="v", ls="", color="#bbbbbb", markeredgecolor="#333333",
-               label="planned drop-off"),
-        Line2D([], [], marker="o", ls="", color=WAITING_COLOR,
-               markeredgecolor="#333333", label="waiting, no taxi yet"),
-        Line2D([], [], marker="o", ls="", color=ASSIGNED_COLOR,
-               markeredgecolor="#333333", label="waiting, taxi assigned"),
-        Line2D([], [], marker="x", ls="", color="black",
-               label="not completed (deadline)"),
-        Line2D([], [], marker="o", ls="", markerfacecolor="none",
-               markeredgecolor=ABANDONED_COLOR, markeredgewidth=1.3,
-               label="abandoned (gave up waiting)"),
-        Line2D([], [], marker="D", ls="--", color=WALK_COLOR,
-               markeredgecolor="#333333", markersize=5,
-               label="walking to pickup district"),
-    ]
-    if model.congestion != "off":
-        handles += [
-            Patch(facecolor=CENTER_SHADE, label=f"congestion x{CENTER_FACTOR} (centre)"),
-            Patch(facecolor=RING_SHADE, label=f"congestion x{RING_FACTOR} (ring)"),
-        ]
-    ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.02, 1),
-              fontsize=8, frameon=False, alignment="left",
-              title="2/4 = on board / seats\nnumber in dot = passengers there",
-              title_fontsize=7)
+    handles, titles = legend_handles(model)
+    legend = ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.02, 1),
+                       fontsize=7.5, frameon=False, alignment="left",
+                       handlelength=1.8, labelspacing=0.45,
+                       title="2/4 = on board / seats\nnumber = passengers there",
+                       title_fontsize=7)
+    for text in legend.get_texts():
+        if text.get_text() in titles:  # section headers
+            text.set_fontweight("bold")
+            text.set_fontsize(8.5)
+            text.set_x(-22)  # pull the header left over its empty handle
     return fig
 
 
@@ -237,6 +347,17 @@ def StatusPanel(model):
                 else f"{model.patience_min}-{model.patience_max} min")
     walking = (f"to neighbour district ({model.walk_minutes_per_district} min/district)"
                if model.walk_radius else "off")
+    by_mode = ""  # extra table rows (each starting with a newline) with buses on
+    if model.buses_on:
+        by_mode = "\n" + "\n".join(
+            f"| {label}: completed / avg wait / avg total time | "
+            f"{fmt(m[f'completed_pct_{mode}'])} % / "
+            f"{fmt(m[f'avg_wait_completed_{mode}'])} min / "
+            f"{fmt(m[f'avg_total_completed_{mode}'])} min |"
+            for mode, label in (("taxi", "Taxi passengers"), ("bus", "Bus passengers"))
+        ) + (f"\n| Bus share / bus distance / avg bus occupancy | "
+             f"{fmt(m['bus_share_pct'])} % / {m['bus_distance']} districts / "
+             f"{fmt(m['avg_bus_occupancy'], 2)} |")
     text = f"""
 ### Minute {model.minute} / {model.duration} — {status}
 
@@ -244,7 +365,7 @@ def StatusPanel(model):
 sharing `{model.sharing_mode}` · arrivals `{model.arrival_mode}`
 (window {model.arrival_window} min) · boarding {model.boarding_minutes} min/stop ·
 patience {patience} · congestion `{model.congestion}` ·
-walking {walking} ·
+walking {walking} · buses {"on" if model.buses_on else "off"} ·
 max extra delay {model.max_extra_delay} min · {model.width}×{model.height} districts ·
 seed {model.seed}
 
@@ -252,7 +373,7 @@ seed {model.seed}
 |---|---|
 | Passengers created | {m['created']} |
 | Waiting / assigned / travelling | {m['waiting']} / {m['assigned']} / {m['travelling']} |
-| Completed | {m['completed']} ({fmt(m['completed_pct'])} %) |
+| Completed | {m['completed']} ({fmt(m['completed_pct'])} %) |{by_mode}
 | Not completed at deadline | {m['not_completed']} |
 | Abandoned (patience exceeded) | {m['abandoned']} ({fmt(m['abandoned_pct'])} %) |
 | Acceptable trips (of created) | {fmt(m['acceptable_pct'])} % |
