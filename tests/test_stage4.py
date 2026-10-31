@@ -7,8 +7,7 @@ from pathlib import Path
 import pytest
 
 from agents import DROPOFF, PICKING_UP, PICKUP
-from helpers import make_model, run, stops_of
-from model import TaxiModel
+from helpers import legacy_model, make_model, run, stops_of
 
 
 def test_insertion_while_driving_to_first_pickup():
@@ -95,7 +94,7 @@ def test_boarding_time_counts_each_stop_in_same_district():
 @pytest.mark.parametrize("boarding", [0, 1, 2])
 @pytest.mark.parametrize("seed", [1, 2])
 def test_large_capacity_never_exceeded(capacity, boarding, seed):
-    m = TaxiModel(num_taxis=3, num_passengers=80, capacity=capacity,
+    m = legacy_model(num_taxis=3, num_passengers=80, capacity=capacity,
                   sharing_mode="detour", arrival_mode="gradual", arrival_window=60,
                   duration=90, boarding_minutes=boarding, seed=seed)
     max_onboard = 0
@@ -145,7 +144,7 @@ def test_booking_limit_per_taxi():
 @pytest.mark.parametrize("mode, capacity", [("none", 1), ("no_detour", 2),
                                             ("detour", 2), ("detour", 4)])
 def test_distance_split_adds_up(mode, capacity):
-    m = run(TaxiModel(num_taxis=5, num_passengers=60, capacity=capacity,
+    m = run(legacy_model(num_taxis=5, num_passengers=60, capacity=capacity,
                       sharing_mode=mode, arrival_mode="gradual", seed=4,
                       duration=90))
     r = m.latest_metrics
@@ -158,7 +157,7 @@ def test_distance_split_adds_up(mode, capacity):
 
 def test_capacity_must_be_between_one_and_four():
     with pytest.raises(ValueError):
-        TaxiModel(capacity=5)
+        legacy_model(capacity=5)
 
 
 BASELINE = Path(__file__).parent / "data" / "baseline_none_no_detour.json"
@@ -169,7 +168,7 @@ BASELINE = Path(__file__).parent / "data" / "baseline_none_no_detour.json"
 def test_none_and_no_detour_unchanged(case):
     """Results recorded with the code before step 1 (stops were instantaneous)
     must be reproduced exactly with boarding_minutes=0."""
-    m = run(TaxiModel(boarding_minutes=0, **case["params"]))
+    m = run(legacy_model(boarding_minutes=0, **case["params"]))
     for key, expected in case["metrics"].items():
         actual = m.latest_metrics[key]
         if isinstance(expected, float) and math.isnan(expected):

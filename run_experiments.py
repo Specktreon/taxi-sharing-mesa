@@ -9,10 +9,18 @@ Each configuration is run with Mesa's batch_run once per seed. The same seed
 gives the same passengers and taxi start cells in every configuration, so the
 configurations are compared on identical demand where their sizes allow.
 MAX_EXTRA_DELAY_MINUTES is never part of a configuration: it stays fixed.
-Optional columns (OPTIONAL_COLUMNS) may be added: boarding_minutes,
-patience_min, patience_max, congestion, walk_radius, walk_minutes_per_district,
-width and height. Without them every run uses the defaults from config.py. An
-empty patience_max cell disables abandonment for that row.
+
+Columns of experiments.csv:
+    required  config_id, description, num_taxis, num_passengers, capacity,
+              sharing_mode
+    features  buses, walking, congestion, patience: optional booleans, mapped
+              to model parameters exactly like the sidebar checkboxes
+              (config.feature_params); absent = off
+    optional  any other model parameter (OPTIONAL_COLUMNS: duration,
+              arrival_mode, width, walk_radius, patience_max, ...), so older
+              files keep working; absent = the fixed default from config.py.
+              A "congestion" column may hold True/False or "off"/"center";
+              an empty patience_max cell disables abandonment for that row.
 
 Outputs (in --out, default "results"):
     runs.csv        one row per configuration and seed (all model metrics)
@@ -32,22 +40,27 @@ import pandas as pd
 from mesa import batch_run
 
 import metrics
-from config import (BOARDING_MINUTES, DEFAULTS, MAX_EXTRA_DELAY_MINUTES,
-                    PATIENCE_MAX, PATIENCE_MIN, WALK_MINUTES_PER_DISTRICT)
+from config import (BOARDING_MINUTES, DEFAULTS, FEATURES, MAX_EXTRA_DELAY_MINUTES,
+                    PATIENCE_MAX, PATIENCE_MIN, WALK_MINUTES_PER_DISTRICT,
+                    feature_params)
 from model import TaxiModel
 
-CONFIG_COLUMNS = ["num_taxis", "num_passengers", "capacity", "sharing_mode",
-                  "arrival_mode", "arrival_window", "duration"]
+CONFIG_COLUMNS = ["num_taxis", "num_passengers", "capacity", "sharing_mode"]
 # Optional columns: when absent, the model default from config.py is used.
-OPTIONAL_COLUMNS = {"boarding_minutes": BOARDING_MINUTES,
-                    "patience_min": PATIENCE_MIN,
-                    "patience_max": PATIENCE_MAX,
-                    "congestion": DEFAULTS["congestion"],
-                    "walk_radius": DEFAULTS["walk_radius"],
-                    "walk_minutes_per_district": WALK_MINUTES_PER_DISTRICT,
-                    "width": DEFAULTS["width"],
-                    "height": DEFAULTS["height"],
-                    "buses": DEFAULTS["buses"]}
+OPTIONAL_COLUMNS = {
+    "arrival_mode": DEFAULTS["arrival_mode"],
+    "arrival_window": DEFAULTS["arrival_window"],
+    "duration": DEFAULTS["duration"],
+    "boarding_minutes": BOARDING_MINUTES,
+    "patience_min": PATIENCE_MIN,
+    "patience_max": PATIENCE_MAX,
+    "congestion": DEFAULTS["congestion"],
+    "walk_radius": DEFAULTS["walk_radius"],
+    "walk_minutes_per_district": WALK_MINUTES_PER_DISTRICT,
+    "width": DEFAULTS["width"],
+    "height": DEFAULTS["height"],
+    "buses": DEFAULTS["buses"],
+}
 PARAM_COLUMNS = CONFIG_COLUMNS + list(OPTIONAL_COLUMNS)
 
 # Metrics summarised across seeds (label used in charts).
@@ -101,12 +114,38 @@ MODE_STYLE = {
 }
 
 
+# Model parameters set by each feature column (see config.feature_params).
+FEATURE_KEYS = {"buses": ["buses"], "walking": ["walk_radius"],
+                "congestion": ["congestion"],
+                "patience": ["patience_min", "patience_max"]}
+assert set(FEATURE_KEYS) == set(FEATURES)
+
+
+def apply_features(configs):
+    """Turn the boolean feature columns into model parameters, like the UI."""
+    configs = configs.copy()
+    for feature, keys in FEATURE_KEYS.items():
+        if feature not in configs.columns:
+            continue
+        if feature == "congestion" and all(isinstance(v, str)
+                                           for v in configs[feature]):
+            continue  # an older file with "off"/"center" values
+        rows = [feature_params(**{feature: bool(v)}) for v in configs[feature]]
+        if feature not in keys:
+            configs = configs.drop(columns=feature)  # "walking", "patience"
+        for key in keys:
+            configs[key] = pd.Series([r[key] for r in rows], index=configs.index,
+                                     dtype=object)
+    return configs
+
+
 def load_configs(path, only=None):
     configs = pd.read_csv(path)
     if only:
         configs = configs[configs["config_id"].isin(only)]
         if configs.empty:
             raise SystemExit(f"No configuration matches {only}")
+    configs = apply_features(configs)
     for column, default in OPTIONAL_COLUMNS.items():
         if column not in configs.columns:
             configs[column] = default

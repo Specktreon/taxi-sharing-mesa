@@ -1,5 +1,7 @@
 """Experiment runner and CSV export."""
 
+import pytest
+
 import pandas as pd
 
 import run_experiments
@@ -57,3 +59,26 @@ def test_experiment_csv_outputs(tmp_path):
     summary_b = summary.set_index("config_id").loc["B"]
     assert abs(summary_b["completed_mean"]
                - runs[runs.config_id == "B"]["completed"].mean()) < 1e-9
+
+
+@pytest.mark.parametrize("congestion_on,congestion_off", [("True", "False"),
+                                                          ("center", "off")])
+def test_feature_columns_map_like_the_sidebar(tmp_path, congestion_on,
+                                              congestion_off):
+    config = tmp_path / "configs.csv"
+    config.write_text(
+        "config_id,description,num_taxis,num_passengers,capacity,sharing_mode,"
+        "buses,walking,congestion,patience\n"
+        f"A,all off,6,90,2,detour,False,False,{congestion_off},False\n"
+        f"B,all on,6,90,2,detour,True,True,{congestion_on},True\n"
+    )
+    runs, _, _ = run_experiments.run(config, seeds=[1], out=tmp_path, charts=False)
+    a, b = runs.set_index("config_id").loc["A"], runs.set_index("config_id").loc["B"]
+    assert (a["buses"], a["walk_radius"], a["congestion"]) == (False, 0, "off")
+    assert pd.isna(a["patience_max"])
+    assert (b["buses"], b["walk_radius"], b["congestion"]) == (True, 1, "center")
+    assert (b["patience_min"], b["patience_max"]) == (10, 30)
+    # Fixed settings from config.py when the columns are absent.
+    assert (b["width"], b["height"], b["duration"], b["arrival_mode"]) == (
+        30, 30, 120, "gradual")
+    assert b["bus_share_pct"] > 0

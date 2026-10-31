@@ -1,9 +1,9 @@
 """Stage 1: single-passenger taxis, arrivals, deadline handling."""
 
 from agents import COMPLETED, NOT_COMPLETED
-from helpers import make_model, run
+from helpers import legacy_model, make_model, run
 from messages import ACCEPT, CONFIRM, PROPOSE, REQUEST
-from model import TaxiModel, generate_scenario
+from model import generate_scenario
 
 
 def test_one_taxi_one_passenger_completes():
@@ -62,7 +62,7 @@ def test_passenger_travelling_at_deadline_not_completed():
 
 
 def test_simulation_stops_at_duration():
-    m = TaxiModel(num_taxis=3, num_passengers=20, duration=17, seed=4)
+    m = legacy_model(num_taxis=3, num_passengers=20, duration=17, seed=4)
     steps = 0
     while m.running:
         m.step()
@@ -102,13 +102,13 @@ def test_messages_follow_protocol():
 
 
 def test_all_at_start_arrivals():
-    m = TaxiModel(num_passengers=15, arrival_mode="all_at_start", seed=2)
+    m = legacy_model(num_passengers=15, arrival_mode="all_at_start", seed=2)
     assert len(m.passengers) == 15
     assert all(p.request_time == 0 for p in m.passengers)
 
 
 def test_gradual_arrivals_appear_over_time():
-    m = TaxiModel(num_passengers=30, arrival_mode="gradual", arrival_window=40,
+    m = legacy_model(num_passengers=30, arrival_mode="gradual", arrival_window=40,
                   duration=60, seed=2)
     created_before = len(m.passengers)
     run(m)
@@ -129,7 +129,7 @@ def test_same_seed_same_demand_across_configurations():
 
 def test_model_is_reproducible():
     def final(seed):
-        m = run(TaxiModel(num_passengers=30, sharing_mode="detour", capacity=2,
+        m = run(legacy_model(num_passengers=30, sharing_mode="detour", capacity=2,
                           seed=seed))
         return str(m.latest_metrics)  # str() so NaN values compare equal
 

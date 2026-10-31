@@ -7,8 +7,7 @@ import pytest
 
 import run_experiments
 from agents import ASSIGNED, COMPLETED, WAITING
-from helpers import make_model, run
-from model import TaxiModel
+from helpers import legacy_model, make_model, run
 from routing import congestion_factor
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -96,7 +95,7 @@ def test_tie_prefers_no_walking():
 def test_invariants_with_walking(mode, capacity, congestion):
     # helpers.run checks after every step: walkers are in the pickup district
     # when they board, promises and extra-delay limits hold.
-    m = run(TaxiModel(num_taxis=5, num_passengers=60, capacity=capacity,
+    m = run(legacy_model(num_taxis=5, num_passengers=60, capacity=capacity,
                       sharing_mode=mode, arrival_mode="gradual", duration=90,
                       congestion=congestion, walk_radius=1, seed=2))
     r = m.latest_metrics
@@ -110,19 +109,21 @@ def test_invariants_with_walking(mode, capacity, congestion):
 
 def test_invalid_walk_radius():
     with pytest.raises(ValueError):
-        TaxiModel(walk_radius=2)
+        legacy_model(walk_radius=2)
     with pytest.raises(ValueError):
-        TaxiModel(walk_radius=1, walk_minutes_per_district=0)
+        legacy_model(walk_radius=1, walk_minutes_per_district=0)
 
 
-@pytest.mark.parametrize("width,height", [(10, 10), (15, 12), (20, 20), (40, 40),
-                                          (10, 40)])
+@pytest.mark.parametrize("width,height", [(10, 10), (15, 12), (20, 20), (30, 30),
+                                          (40, 40), (10, 40)])
 def test_congestion_zones_at_any_grid_size(width, height):
+    # Centre: one third of the grid in each direction; ring: 1 district around.
     factors = [congestion_factor((x, y), width, height, "center")
                for x in range(width) for y in range(height)]
-    assert factors.count(3) == 36  # the 6x6 centre always fits from 10x10 up
-    assert factors.count(2) == 8 * 8 - 36  # and so does its ring
-    m = run(TaxiModel(width=width, height=height, num_passengers=30,
+    cx, cy = width // 3, height // 3
+    assert factors.count(3) == cx * cy
+    assert factors.count(2) == (cx + 2) * (cy + 2) - cx * cy  # ring fits
+    m = run(legacy_model(width=width, height=height, num_passengers=30,
                       capacity=2, sharing_mode="detour", congestion="center",
                       walk_radius=1, duration=40))
     assert all(0 <= p.origin[0] < width and 0 <= p.origin[1] < height

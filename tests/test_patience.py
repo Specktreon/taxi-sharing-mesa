@@ -7,7 +7,7 @@ import pytest
 
 import run_experiments
 from agents import ABANDONED, ASSIGNED, COMPLETED, WAITING
-from helpers import make_model, run
+from helpers import legacy_model, make_model, run
 from messages import ACCEPT, PROPOSE
 from model import TaxiModel
 
@@ -80,27 +80,31 @@ def test_passenger_accepts_taxi_within_patience():
     assert m.latest_metrics["acceptable_pct"] == 100
 
 
-def test_ui_model_swaps_patience_range():
-    """The UI's Reset path (Mesa's own kwargs builder) with min > max."""
-    from mesa.visualization.solara_viz import _build_model_init_kwargs
+def test_ui_checkboxes_map_to_model_parameters():
+    """The UI's Reset path (Mesa's own kwargs builder) with the checkboxes."""
+    from mesa.visualization.solara_viz import (_build_model_init_kwargs,
+                                               _check_model_params)
 
-    from app import UITaxiModel
+    from app import UITaxiModel, model_params
 
     model = UITaxiModel()
-    params = {"num_passengers": 30, "patience_min": 9, "patience_max": 4,
-              "seed": 7}
+    _check_model_params(model, model_params)  # what SolaraViz checks
+    assert (model.patience_max, model.congestion, model.walk_radius,
+            model.buses_on) == (None, "off", 0, False)
+    assert (model.width, model.height, model.duration) == (30, 30, 120)
+    params = {"num_passengers": 30, "seed": 7, "patience": True,
+              "congestion": True, "walking": True, "buses": True}
     kwargs = _build_model_init_kwargs(model, params, add_scenario_when_empty=True,
                                       require_model_accepts_scenario=True)
     new = type(model)(**kwargs)
-    assert (new.patience_min, new.patience_max, new.seed) == (4, 9, 7)
-    assert all(4 <= p.patience <= 9 for p in new.passengers)
-    off = UITaxiModel(patience_min=9, patience_max=0)
-    assert (off.patience_min, off.patience_max) == (9, None)
+    assert (new.patience_min, new.patience_max, new.seed) == (10, 30, 7)
+    assert (new.congestion, new.walk_radius, new.buses_on) == ("center", 1, True)
+    assert all(p.patience is None or 10 <= p.patience <= 30 for p in new.passengers)
 
 
 def test_patience_disabled_by_default_and_by_zero():
     for kwargs in ({}, {"patience_max": None}, {"patience_max": 0}):
-        m = TaxiModel(num_passengers=60, arrival_mode="gradual", **kwargs)
+        m = legacy_model(num_passengers=60, arrival_mode="gradual", **kwargs)
         assert all(p.patience is None for p in m.passengers)
         assert m.patience_max is None
 
@@ -108,23 +112,23 @@ def test_patience_disabled_by_default_and_by_zero():
 def test_patience_keeps_demand_identical():
     params = dict(num_taxis=3, num_passengers=60, capacity=2, sharing_mode="detour",
                   arrival_mode="gradual", duration=60, seed=3)
-    plain = run(TaxiModel(**params))
-    patient = run(TaxiModel(patience_min=3, patience_max=8, **params))
+    plain = run(legacy_model(**params))
+    patient = run(legacy_model(patience_min=3, patience_max=8, **params))
     trip = lambda p: (p.request_time, p.origin, p.destination)  # noqa: E731
     assert [trip(p) for p in plain.passengers] == [trip(p) for p in patient.passengers]
     assert all(3 <= p.patience <= 8 for p in patient.passengers)
     assert patient.latest_metrics["abandoned"] > 0
     # Same seed, same draws.
-    again = TaxiModel(patience_min=3, patience_max=8, **params)
+    again = legacy_model(patience_min=3, patience_max=8, **params)
     assert ([p.patience for p in again.passengers]
             == [p.patience for p in patient.passengers[:len(again.passengers)]])
 
 
 def test_invalid_patience_range():
     with pytest.raises(ValueError):
-        TaxiModel(patience_min=5, patience_max=3)
+        legacy_model(patience_min=5, patience_max=3)
     with pytest.raises(ValueError):
-        TaxiModel(patience_min=0, patience_max=3)
+        legacy_model(patience_min=0, patience_max=3)
 
 
 def test_optional_patience_columns(tmp_path):

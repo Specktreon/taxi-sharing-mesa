@@ -7,8 +7,7 @@ import pytest
 
 import run_experiments
 from agents import COMPLETED
-from helpers import make_model, run
-from model import TaxiModel
+from helpers import legacy_model, make_model, run
 from routing import congestion_factor
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,7 +21,7 @@ def test_congestion_zones_on_default_grid():
     assert factor((5, 10)) == factor((14, 14)) == factor((0, 0)) == 1
     assert congestion_factor((10, 10), 20, 20, "off") == 1
     with pytest.raises(ValueError):
-        TaxiModel(congestion="rush_hour")
+        legacy_model(congestion="rush_hour")
 
 
 def test_trip_through_centre_takes_longer():
@@ -65,7 +64,7 @@ def test_limits_hold_under_congestion(capacity, seed):
     # helpers.run checks after every step that no pickup slips more than
     # MAX_EXTRA_DELAY_MINUTES past its promise and every completed passenger
     # has extra delay <= MAX_EXTRA_DELAY_MINUTES.
-    m = run(TaxiModel(num_taxis=5, num_passengers=60, capacity=capacity,
+    m = run(legacy_model(num_taxis=5, num_passengers=60, capacity=capacity,
                       sharing_mode="detour", arrival_mode="gradual", duration=90,
                       congestion="center", seed=seed))
     r = m.latest_metrics
@@ -76,7 +75,7 @@ def test_limits_hold_under_congestion(capacity, seed):
 def test_no_detour_promises_exact_under_congestion():
     # With instantaneous stops, no_detour insertions never delay anyone, so
     # every pickup happens exactly at the promised minute.
-    m = run(TaxiModel(num_taxis=5, num_passengers=60, capacity=2,
+    m = run(legacy_model(num_taxis=5, num_passengers=60, capacity=2,
                       sharing_mode="no_detour", arrival_mode="gradual",
                       duration=90, boarding_minutes=0, congestion="center", seed=2))
     picked = [p for p in m.passengers if p.pickup_time is not None]

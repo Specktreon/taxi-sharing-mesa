@@ -1,6 +1,12 @@
 """Simulation constants and default parameters.
 
-One simulation step = one simulated minute.
+One simulation step = one simulated minute. The study uses FIXED settings: a
+30x30 city, 120 minutes, gradual requests over the first 90 minutes, 1 minute
+per district, 1 boarding minute per stop, MAX_EXTRA_DELAY_MINUTES = 10, and,
+when the features are switched on, patience 10-30 min, walking 3 min per
+district and the bus settings below. Only the sharing mode, taxi capacity,
+fleet size, demand, seed and the four features (buses, walking, congestion,
+patience: see FEATURES) vary between scenarios.
 """
 
 # Maximum additional in-vehicle time (minutes) any passenger may suffer because
@@ -16,17 +22,20 @@ BOARDING_MINUTES = 1
 
 # Passenger patience (minutes): each passenger draws an integer patience
 # uniformly in [PATIENCE_MIN, PATIENCE_MAX] and abandons if still waiting for a
-# CONFIRM after that long. PATIENCE_MAX = None (or 0) disables abandonment.
+# CONFIRM after that long. PATIENCE_MAX = None (or 0) disables abandonment;
+# the "patience" feature switches it on with PATIENCE_MAX_ON.
 PATIENCE_MIN = 10
 PATIENCE_MAX = None
+PATIENCE_MAX_ON = 30
 
 # Traffic congestion (parameter `congestion`):
 #   "off"    every district costs minutes_per_district to enter.
-#   "center" the central CONGESTION_CENTER_SIZE x CONGESTION_CENTER_SIZE
-#            districts cost CENTER_FACTOR times that, the ring of districts
-#            around them RING_FACTOR times; all others factor 1.
+#   "center" a central rectangle of (width // CONGESTION_CENTER_FRACTION) x
+#            (height // CONGESTION_CENTER_FRACTION) districts (10x10 on 30x30)
+#            costs CENTER_FACTOR times that, the ring of districts around it
+#            RING_FACTOR times; all others factor 1.
 CONGESTION_MODES = ("off", "center")
-CONGESTION_CENTER_SIZE = 6
+CONGESTION_CENTER_FRACTION = 3
 CENTER_FACTOR = 3
 RING_FACTOR = 2
 
@@ -74,18 +83,35 @@ SHARING_MODES = ("none", "no_detour", "detour")
 #   "gradual"      request minutes are drawn uniformly in [0, arrival_window).
 ARRIVAL_MODES = ("all_at_start", "gradual")
 
+# Base scenario. num_taxis / num_passengers were calibrated so that sharing
+# "none" with capacity 1 completes roughly 50-70 % of passengers (about 58 %
+# over seeds 1-5); see README section 7.
 DEFAULTS = {
-    "width": 20,
-    "height": 20,
-    "num_taxis": 5,
-    "num_passengers": 40,
+    "width": 30,
+    "height": 30,
+    "num_taxis": 20,
+    "num_passengers": 90,
     "capacity": 1,
     "sharing_mode": "none",
-    "arrival_mode": "all_at_start",
-    "arrival_window": 60,
-    "duration": 60,
+    "arrival_mode": "gradual",
+    "arrival_window": 90,
+    "duration": 120,
     "congestion": "off",
     "walk_radius": 0,
     "buses": False,
     "seed": 1,
 }
+
+# The four on/off features used by the sidebar and experiments.csv.
+FEATURES = ("buses", "walking", "congestion", "patience")
+
+
+def feature_params(buses=False, walking=False, congestion=False, patience=False):
+    """TaxiModel keyword arguments for the four on/off features."""
+    return {
+        "buses": bool(buses),
+        "walk_radius": 1 if walking else 0,
+        "congestion": "center" if congestion else "off",
+        "patience_min": PATIENCE_MIN,
+        "patience_max": PATIENCE_MAX_ON if patience else None,
+    }

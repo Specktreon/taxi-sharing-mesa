@@ -1,11 +1,11 @@
-config_id,description,num_taxis,num_passengers,capacity,sharing_mode,arrival_mode,arrival_window,duration
-C1,Baseline: single rides; all requests at start,5,40,1,none,all_at_start,60,60
-C2,Capacity 2 without route changes; all at start,5,40,2,no_detour,all_at_start,60,60
-C3,Capacity 2 with detours; all at start,5,40,2,detour,all_at_start,60,60
-C4,Baseline: single rides; gradual arrivals,5,60,1,none,gradual,90,120
-C5,Capacity 2 without route changes; gradual,5,60,2,no_detour,gradual,90,120
-C6,Capacity 2 with detours; gradual,5,60,2,detour,gradual,90,120
-C7,Larger fleet; single rides; gradual,10,60,1,none,gradual,90,120
-C8,Larger fleet; detours; gradual,10,60,2,detour,gradual,90,120
-C9,High demand; single rides; gradual,5,100,1,none,gradual,90,120
-C10,High demand; detours; gradual,5,100,2,detour,gradual,90,120
+config_id,description,num_taxis,num_passengers,capacity,sharing_mode,arrival_mode,arrival_window,duration,width,height
+C1,Baseline: single rides; all requests at start,5,40,1,none,all_at_start,60,60,20,20
+C2,Capacity 2 without route changes; all at start,5,40,2,no_detour,all_at_start,60,60,20,20
+C3,Capacity 2 with detours; all at start,5,40,2,detour,all_at_start,60,60,20,20
+C4,Baseline: single rides; gradual arrivals,5,60,1,none,gradual,90,120,20,20
+C5,Capacity 2 without route changes; gradual,5,60,2,no_detour,gradual,90,120,20,20
+C6,Capacity 2 with detours; gradual,5,60,2,detour,gradual,90,120,20,20
+C7,Larger fleet; single rides; gradual,10,60,1,none,gradual,90,120,20,20
+C8,Larger fleet; detours; gradual,10,60,2,detour,gradual,90,120,20,20
+C9,High demand; single rides; gradual,5,100,1,none,gradual,90,120,20,20
+C10,High demand; detours; gradual,5,100,2,detour,gradual,90,120,20,20

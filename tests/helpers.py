@@ -5,11 +5,25 @@ from agents import (ABANDONED, ASSIGNED, COMPLETED, DROPOFF, NOT_COMPLETED, PICK
 from model import TaxiModel
 
 
+# The defaults the tests were written for (before the fixed 30x30 study
+# settings): tests that build random scenarios use these explicitly, so they
+# keep running exactly the same scenarios.
+OLD_DEFAULTS = {"width": 20, "height": 20, "num_taxis": 5, "num_passengers": 40,
+                "arrival_mode": "all_at_start", "arrival_window": 60,
+                "duration": 60}
+
+
+def legacy_model(**kwargs):
+    """TaxiModel with OLD_DEFAULTS for every parameter not given."""
+    return TaxiModel(**{**OLD_DEFAULTS, **kwargs})
+
+
 def make_model(taxi_starts, requests, **kwargs):
     # Hand-computed expected times in the scenario tests assume instantaneous
-    # stops unless a test passes boarding_minutes explicitly.
+    # stops unless a test passes boarding_minutes explicitly, and a 20x20 grid
+    # (it fixes the congestion zone and the walking neighbours at the edges).
     params = {"duration": 60, "capacity": 1, "sharing_mode": "none",
-              "boarding_minutes": 0}
+              "boarding_minutes": 0, "width": 20, "height": 20}
     params.update(kwargs)
     return TaxiModel(taxi_starts=taxi_starts, requests=requests, **params)
 
@@ -74,4 +88,5 @@ def stops_of(taxi):
     return [(kind, p.unique_id) for kind, p in taxi.stops]
 
 
-__all__ = ["make_model", "run", "check_invariants", "stops_of", "PICKUP", "DROPOFF"]
+__all__ = ["make_model", "legacy_model", "OLD_DEFAULTS", "run", "check_invariants",
+           "stops_of", "PICKUP", "DROPOFF"]

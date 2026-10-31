@@ -8,7 +8,7 @@ the same path (TaxiModel.travel_time) and the actual movement happens one cell
 at a time in TaxiAgent.move().
 """
 
-from config import (CENTER_FACTOR, CONGESTION_CENTER_SIZE, CONGESTION_MODES,
+from config import (CENTER_FACTOR, CONGESTION_CENTER_FRACTION, CONGESTION_MODES,
                     RING_FACTOR)
 
 
@@ -44,22 +44,23 @@ def travel_time(a, b, minutes_per_district):
 
 
 def congestion_center(width, height):
-    """Lower-left cell (x0, y0) of the central congested square."""
-    return ((width - CONGESTION_CENTER_SIZE) // 2,
-            (height - CONGESTION_CENTER_SIZE) // 2)
+    """(x0, y0, size_x, size_y) of the central congested rectangle: one third
+    of the grid in each direction (at least 1 district), centred."""
+    size_x = max(1, width // CONGESTION_CENTER_FRACTION)
+    size_y = max(1, height // CONGESTION_CENTER_FRACTION)
+    return (width - size_x) // 2, (height - size_y) // 2, size_x, size_y
 
 
 def congestion_factor(cell, width, height, mode):
     """Integer factor on the time to enter `cell`: CENTER_FACTOR inside the
-    central square, RING_FACTOR in the ring of cells around it, else 1."""
+    central rectangle, RING_FACTOR in the ring of cells around it, else 1."""
     if mode not in CONGESTION_MODES:
         raise ValueError(f"congestion must be one of {CONGESTION_MODES}")
     if mode == "off":
         return 1
-    x0, y0 = congestion_center(width, height)
-    last = CONGESTION_CENTER_SIZE - 1
-    # Chebyshev distance from the cell to the central square (0 = inside).
-    dx = max(x0 - cell[0], 0, cell[0] - (x0 + last))
-    dy = max(y0 - cell[1], 0, cell[1] - (y0 + last))
+    x0, y0, size_x, size_y = congestion_center(width, height)
+    # Chebyshev distance from the cell to the central rectangle (0 = inside).
+    dx = max(x0 - cell[0], 0, cell[0] - (x0 + size_x - 1))
+    dy = max(y0 - cell[1], 0, cell[1] - (y0 + size_y - 1))
     ring = max(dx, dy)
     return CENTER_FACTOR if ring == 0 else RING_FACTOR if ring == 1 else 1

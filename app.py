@@ -6,7 +6,6 @@ then open the printed URL (default http://localhost:8765).
 Use the sidebar to change parameters, then Reset / Step / Play.
 """
 
-import inspect
 import math
 from collections import Counter
 
@@ -20,10 +19,8 @@ from mesa.visualization import SolaraViz
 
 from agents import (ABANDONED, ASSIGNED, NOT_COMPLETED, PICKUP, WAITING,
                     stop_district)
-from config import (ARRIVAL_MODES, BOARDING_MINUTES, CAPACITIES, CENTER_FACTOR,
-                    CONGESTION_CENTER_SIZE, CONGESTION_MODES, DEFAULTS,
-                    MAX_EXTRA_DELAY_MINUTES, PATIENCE_MIN, RING_FACTOR,
-                    SHARING_MODES, WALK_MINUTES_PER_DISTRICT)
+from config import (CAPACITIES, CENTER_FACTOR, DEFAULTS, MAX_EXTRA_DELAY_MINUTES,
+                    RING_FACTOR, SHARING_MODES, feature_params)
 from model import TaxiModel
 from routing import congestion_center
 
@@ -45,18 +42,21 @@ TEXT_OUTLINE = [patheffects.withStroke(linewidth=2.2, foreground="white")]
 
 
 class UITaxiModel(TaxiModel):
-    """TaxiModel for the sliders: if Patience min > Patience max while
-    abandonment is on, the two are swapped instead of raising on Reset."""
+    """TaxiModel for the sidebar: only the varied parameters, plus the four
+    feature checkboxes, mapped to model parameters by config.feature_params.
+    Every other setting keeps its fixed default from config.py. (Mesa's Reset
+    builds a new model from this exact signature, so it lists every sidebar
+    name and has no **kwargs.)"""
 
-    def __init__(self, **kwargs):
-        low = kwargs.get("patience_min", PATIENCE_MIN)
-        high = kwargs.get("patience_max")
-        if high and low > high:
-            kwargs["patience_min"], kwargs["patience_max"] = high, low
-        super().__init__(**kwargs)
-
-    # Mesa's Reset inspects the signature to route parameters: show TaxiModel's.
-    __init__.__signature__ = inspect.signature(TaxiModel.__init__)
+    def __init__(self, sharing_mode="detour", capacity=2,
+                 num_taxis=DEFAULTS["num_taxis"],
+                 num_passengers=DEFAULTS["num_passengers"], seed=DEFAULTS["seed"],
+                 buses=False, walking=False, congestion=False, patience=False):
+        self.features = {"buses": buses, "walking": walking,
+                         "congestion": congestion, "patience": patience}
+        super().__init__(sharing_mode=sharing_mode, capacity=capacity,
+                         num_taxis=num_taxis, num_passengers=num_passengers,
+                         seed=seed, **feature_params(**self.features))
 
 
 def draw_city(model, fig=None):
@@ -89,10 +89,10 @@ def draw_city(model, fig=None):
 
     # Congestion zones: the ring square first, the centre square on top.
     if model.congestion != "off":
-        x0, y0 = congestion_center(w, h)
+        x0, y0, size_x, size_y = congestion_center(w, h)
         for pad, color in ((1, RING_SHADE), (0, CENTER_SHADE)):
-            size = CONGESTION_CENTER_SIZE + 2 * pad
-            ax.add_patch(Rectangle((x0 - pad - 0.5, y0 - pad - 0.5), size, size,
+            ax.add_patch(Rectangle((x0 - pad - 0.5, y0 - pad - 0.5),
+                                   size_x + 2 * pad, size_y + 2 * pad,
                                    facecolor=color, edgecolor="none", zorder=0))
 
     # Planned routes and stops, in the colour of the taxi's state.
@@ -273,47 +273,25 @@ seed {model.seed}
     return solara.Markdown(text)
 
 
+# Sidebar: only what varies between scenarios. Everything else is fixed in
+# config.py (30x30 map, 120 min, gradual arrivals over 90 min, ...).
 model_params = {
-    "width": {"type": "SliderInt", "value": DEFAULTS["width"],
-              "label": "Grid width (districts)", "min": 10, "max": 40, "step": 1},
-    "height": {"type": "SliderInt", "value": DEFAULTS["height"],
-               "label": "Grid height (districts)", "min": 10, "max": 40, "step": 1},
+    "sharing_mode": {"type": "Select", "value": "detour",
+                     "values": list(SHARING_MODES), "label": "Sharing mode"},
+    "capacity": {"type": "Select", "value": 2, "values": list(CAPACITIES),
+                 "label": "Taxi capacity"},
     "num_taxis": {"type": "SliderInt", "value": DEFAULTS["num_taxis"],
-                  "label": "Number of taxis", "min": 1, "max": 20, "step": 1},
+                  "label": "Number of taxis", "min": 1, "max": 40, "step": 1},
     "num_passengers": {"type": "SliderInt", "value": DEFAULTS["num_passengers"],
                        "label": "Number of passengers", "min": 1, "max": 200,
                        "step": 1},
-    "capacity": {"type": "Select", "value": 2, "values": list(CAPACITIES),
-                 "label": "Taxi capacity"},
-    "sharing_mode": {"type": "Select", "value": "detour",
-                     "values": list(SHARING_MODES), "label": "Sharing mode"},
-    "boarding_minutes": {"type": "SliderInt", "value": BOARDING_MINUTES,
-                         "label": "Boarding time per stop (min)", "min": 0,
-                         "max": 3, "step": 1},
-    "patience_min": {"type": "SliderInt", "value": PATIENCE_MIN,
-                     "label": "Patience min (min)", "min": 1, "max": 60,
-                     "step": 1},
-    "patience_max": {"type": "SliderInt", "value": 0,
-                     "label": "Patience max (min, 0 = never abandon)", "min": 0,
-                     "max": 60, "step": 1},
-    "congestion": {"type": "Select", "value": DEFAULTS["congestion"],
-                   "values": list(CONGESTION_MODES), "label": "Traffic congestion"},
-    # Checkbox gives a bool; TaxiModel stores int(walk_radius), i.e. 0 or 1.
-    "walk_radius": {"type": "Checkbox", "value": bool(DEFAULTS["walk_radius"]),
-                    "label": "Walk to neighbour district"},
-    "walk_minutes_per_district": {"type": "SliderInt",
-                                  "value": WALK_MINUTES_PER_DISTRICT,
-                                  "label": "Walking time per district (min)",
-                                  "min": 1, "max": 10, "step": 1},
-    "arrival_mode": {"type": "Select", "value": DEFAULTS["arrival_mode"],
-                     "values": list(ARRIVAL_MODES), "label": "Passenger arrivals"},
-    "arrival_window": {"type": "SliderInt", "value": DEFAULTS["arrival_window"],
-                       "label": "Gradual arrival window (min)", "min": 1,
-                       "max": 240, "step": 1},
-    "duration": {"type": "SliderInt", "value": DEFAULTS["duration"],
-                 "label": "Duration (min)", "min": 10, "max": 240, "step": 10},
     "seed": {"type": "SliderInt", "value": DEFAULTS["seed"], "label": "Seed",
              "min": 1, "max": 100, "step": 1},
+    "buses": {"type": "Checkbox", "value": False, "label": "Buses"},
+    "walking": {"type": "Checkbox", "value": False,
+                "label": "Walking to neighbour district"},
+    "congestion": {"type": "Checkbox", "value": False, "label": "Traffic congestion"},
+    "patience": {"type": "Checkbox", "value": False, "label": "Passenger patience"},
 }
 
 # Time-series charts: one panel per measure group (series -> colour).
@@ -360,8 +338,7 @@ def ChartsPanel(model):
 def Page():
     # One model per browser session; SolaraViz's Reset replaces it with a new
     # model built from the sidebar parameters.
-    model = solara.use_memo(lambda: UITaxiModel(capacity=2, sharing_mode="detour"),
-                            [])
+    model = solara.use_memo(UITaxiModel, [])
     # Mesa's dashboard needs the Vue 2 widget stack (ipyvue/ipyvuetify 1.x,
     # pinned in requirements.txt); with the 3.x packages the main area is blank.
     SolaraViz(

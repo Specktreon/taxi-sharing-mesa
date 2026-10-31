@@ -9,8 +9,7 @@ import run_experiments
 from agents import BUS, COMPLETED, TAXI
 from buses import choose_bus_trip, make_bus_lines
 from config import BUS_CAPACITY, BUSES_PER_LINE
-from helpers import check_invariants, make_model, run
-from model import TaxiModel
+from helpers import check_invariants, legacy_model, make_model, run
 
 ROOT = Path(__file__).resolve().parent.parent
 GRID = {"width": 20, "height": 20}
@@ -26,7 +25,7 @@ def test_lines_and_stops():
     thirty = make_bus_lines(30, 30)
     assert [thirty[0].cells[0][1], thirty[1].cells[0][1]] == [10, 20]
     assert [thirty[2].cells[0][0], thirty[3].cells[0][0]] == [10, 20]
-    m = TaxiModel(buses=True, **GRID)
+    m = legacy_model(buses=True, **GRID)
     assert len(m.buses) == 4 * BUSES_PER_LINE
     assert all(b.capacity == BUS_CAPACITY for b in m.buses)
 
@@ -92,7 +91,7 @@ def test_bus_never_exceeds_capacity():
 @pytest.mark.parametrize("mode,capacity", [("none", 1), ("no_detour", 2),
                                            ("detour", 2), ("detour", 4)])
 def test_invariants_with_buses_and_all_features(mode, capacity):
-    m = run(TaxiModel(num_taxis=6, num_passengers=100, capacity=capacity,
+    m = run(legacy_model(num_taxis=6, num_passengers=100, capacity=capacity,
                       sharing_mode=mode, arrival_mode="gradual", duration=120,
                       arrival_window=90, buses=True, walk_radius=1,
                       congestion="center", patience_min=10, patience_max=30,

@@ -9,8 +9,7 @@ import pytest
 
 from agents import COMPLETED, DROPOFF, PICKUP
 from config import MAX_EXTRA_DELAY_MINUTES
-from helpers import make_model, run, stops_of
-from model import TaxiModel
+from helpers import legacy_model, make_model, run, stops_of
 
 P1 = (0, (0, 0), (10, 0))
 
@@ -21,7 +20,7 @@ def scenario(p2, **kwargs):
 
 def test_threshold_is_fixed_at_ten():
     assert MAX_EXTRA_DELAY_MINUTES == 10
-    assert TaxiModel().max_extra_delay == 10
+    assert legacy_model().max_extra_delay == 10
 
 
 @pytest.mark.parametrize(
@@ -135,7 +134,7 @@ def test_capacity_never_exceeded():
 def test_invariants_random_scenarios(mode, capacity, arrival, seed):
     """run() checks capacity, pickup-before-drop-off, status consistency and
     the delay threshold after every step."""
-    m = run(TaxiModel(num_taxis=4, num_passengers=50, capacity=capacity,
+    m = run(legacy_model(num_taxis=4, num_passengers=50, capacity=capacity,
                       sharing_mode=mode, arrival_mode=arrival, arrival_window=60,
                       duration=90, seed=seed))
     assert m.minute == 90
