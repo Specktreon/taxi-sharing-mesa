@@ -9,10 +9,10 @@ Each configuration is run with Mesa's batch_run once per seed. The same seed
 gives the same passengers and taxi start cells in every configuration, so the
 configurations are compared on identical demand where their sizes allow.
 MAX_EXTRA_DELAY_MINUTES is never part of a configuration: it stays fixed.
-Optional boarding_minutes, patience_min, patience_max and congestion columns
-may be added; without them every run uses BOARDING_MINUTES, PATIENCE_MIN,
-PATIENCE_MAX and congestion "off" from config.py. An empty patience_max cell
-disables abandonment for that row.
+Optional columns (OPTIONAL_COLUMNS) may be added: boarding_minutes,
+patience_min, patience_max, congestion, walk_radius, walk_minutes_per_district,
+width and height. Without them every run uses the defaults from config.py. An
+empty patience_max cell disables abandonment for that row.
 
 Outputs (in --out, default "results"):
     runs.csv        one row per configuration and seed (all model metrics)
@@ -33,7 +33,7 @@ from mesa import batch_run
 
 import metrics
 from config import (BOARDING_MINUTES, DEFAULTS, MAX_EXTRA_DELAY_MINUTES,
-                    PATIENCE_MAX, PATIENCE_MIN)
+                    PATIENCE_MAX, PATIENCE_MIN, WALK_MINUTES_PER_DISTRICT)
 from model import TaxiModel
 
 CONFIG_COLUMNS = ["num_taxis", "num_passengers", "capacity", "sharing_mode",
@@ -42,7 +42,11 @@ CONFIG_COLUMNS = ["num_taxis", "num_passengers", "capacity", "sharing_mode",
 OPTIONAL_COLUMNS = {"boarding_minutes": BOARDING_MINUTES,
                     "patience_min": PATIENCE_MIN,
                     "patience_max": PATIENCE_MAX,
-                    "congestion": DEFAULTS["congestion"]}
+                    "congestion": DEFAULTS["congestion"],
+                    "walk_radius": DEFAULTS["walk_radius"],
+                    "walk_minutes_per_district": WALK_MINUTES_PER_DISTRICT,
+                    "width": DEFAULTS["width"],
+                    "height": DEFAULTS["height"]}
 PARAM_COLUMNS = CONFIG_COLUMNS + list(OPTIONAL_COLUMNS)
 
 # Metrics summarised across seeds (label used in charts).
@@ -62,6 +66,8 @@ SUMMARY_METRICS = {
     "avg_extra_delay_shared": "Avg extra delay, shared rides (min)",
     "max_extra_delay": "Max extra delay (min)",
     "avg_wait_censored": "Avg waiting incl. unserved (min)",
+    "walked_pct": "Completed passengers who walked (%)",
+    "avg_walk_minutes": "Avg walking time, completed (min)",
     "total_distance": "Total taxi distance (districts)",
     "empty_distance": "Empty taxi distance (districts)",
     "occupied_distance": "Occupied taxi distance (districts)",

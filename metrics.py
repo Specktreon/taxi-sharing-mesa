@@ -24,6 +24,12 @@ not_completed. acceptable_pct = % of created passengers who completed with
 waiting time <= their patience (any wait when patience is disabled) and extra
 delay <= the model's max_extra_delay (MAX_EXTRA_DELAY_MINUTES).
 
+Walking (optional): a passenger picked up in a neighbouring district has its
+individual time and extra delay measured from that pickup district; its
+waiting time (pickup - request) includes the walk. walked_pct = % of
+completed passengers who walked; avg_walk_minutes = mean walking minutes over
+completed passengers (0 for those who did not walk).
+
 Distances are counted in districts driven. total = empty + occupied, where
 "empty" means no passenger on board. passenger_distance sums, over passengers,
 the districts each one rode (passenger-km); avg_occupancy =
@@ -56,6 +62,8 @@ MODEL_METRICS = [
     "avg_extra_delay_shared",
     "max_extra_delay",
     "avg_wait_censored",
+    "walked_pct",
+    "avg_walk_minutes",
     "total_distance",
     "empty_distance",
     "occupied_distance",
@@ -72,6 +80,8 @@ PASSENGER_REPORTERS = {
     "passenger_id": "unique_id",
     "origin": lambda p: f"{p.origin[0]};{p.origin[1]}",
     "destination": lambda p: f"{p.destination[0]};{p.destination[1]}",
+    "pickup_district": lambda p: f"{p.pickup_district[0]};{p.pickup_district[1]}",
+    "walk_minutes": "walk_minutes",
     "request_time": "request_time",
     "patience": "patience",
     "promised_pickup": "promised_pickup",
@@ -143,6 +153,11 @@ def compute(model):
         "avg_extra_delay_shared": mean(p.extra_delay for p in shared_done),
         "max_extra_delay": max((p.extra_delay for p in done), default=math.nan),
         "avg_wait_censored": mean(censored_wait(p) for p in passengers),
+        "walked_pct": (
+            100 * sum(p.pickup_district != p.origin for p in done) / len(done)
+            if done else math.nan
+        ),
+        "avg_walk_minutes": mean(p.walk_minutes for p in done),
         "total_distance": total_distance,
         "empty_distance": empty_distance,
         "occupied_distance": sum(t.occupied_distance for t in model.taxis),

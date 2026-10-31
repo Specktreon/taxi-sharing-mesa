@@ -30,6 +30,13 @@ CONGESTION_CENTER_SIZE = 6
 CENTER_FACTOR = 3
 RING_FACTOR = 2
 
+# Walking to a neighbouring district (parameter walk_radius): 0 = off; 1 = a
+# taxi may also pick the passenger up in an adjacent district (Manhattan
+# distance 1) that the passenger can reach before the taxi. Walking speed is
+# not affected by congestion.
+WALK_RADII = (0, 1)
+WALK_MINUTES_PER_DISTRICT = 3
+
 # Allowed taxi capacities (seats).
 CAPACITIES = (1, 2, 3, 4)
 
@@ -67,5 +74,6 @@ DEFAULTS = {
     "arrival_window": 60,
     "duration": 60,
     "congestion": "off",
+    "walk_radius": 0,
     "seed": 1,
 }

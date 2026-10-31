@@ -4,7 +4,7 @@ import mesa
 
 from config import BOOKINGS_PER_SEAT
 from messages import ACCEPT, CONFIRM, PROPOSE, REJECT, REQUEST, Message
-from routing import grid_path, step_towards
+from routing import grid_path, manhattan, step_towards
 
 # Passenger statuses
 WAITING = "waiting"  # requested a taxi, no taxi confirmed yet
@@ -28,20 +28,24 @@ DROPOFF = "dropoff"
 def stop_district(stop):
     """District where a (kind, passenger) stop takes place."""
     kind, passenger = stop
-    return passenger.origin if kind == PICKUP else passenger.destination
+    return passenger.pickup_district if kind == PICKUP else passenger.destination
 
 
 class PassengerAgent(mesa.Agent):
     """A passenger who requests one trip from origin to destination.
 
-    Timing (see metrics.py): pickup_time = minute the taxi reaches the origin
-    (boarding starts); arrival_time = minute alighting at the destination ends.
+    Timing (see metrics.py): pickup_time = minute the taxi reaches the pickup
+    district (boarding starts); arrival_time = minute alighting at the
+    destination ends. The pickup district is the origin, or with walking an
+    adjacent district the passenger walks to after its CONFIRM.
     """
 
     def __init__(self, model, origin, destination, request_time, patience=None):
         super().__init__(model)
         self.origin = origin
         self.destination = destination
+        self.pickup_district = origin
+        self.walk_progress = 0  # minutes walked towards the next district
         self.request_time = request_time
         self.patience = patience  # minutes before abandoning; None = never
         self.pickup_time = None
@@ -54,12 +58,32 @@ class PassengerAgent(mesa.Agent):
         self.shared = False  # True if another passenger rode with them
         self.ride_distance = 0  # districts driven while on board
         self.inbox = []
-        # Baseline: boarding + direct x-first drive (with congestion costs) +
-        # alighting, alone, without waiting. A solo direct trip therefore has
-        # extra delay 0.
-        self.individual_time = (
-            model.travel_time(origin, destination) + 2 * model.boarding_minutes
-        )
+        self._individual = {}  # pickup district -> individual time
+
+    @property
+    def individual_time(self):
+        """Baseline: boarding + direct x-first drive (with congestion costs)
+        from the pickup district + alighting, alone, without waiting. A solo
+        direct trip therefore has extra delay 0. Measured from the pickup
+        district, so walking (the passenger's choice) is not extra delay."""
+        district = self.pickup_district
+        if district not in self._individual:
+            self._individual[district] = (
+                self.model.travel_time(district, self.destination)
+                + 2 * self.model.boarding_minutes
+            )
+        return self._individual[district]
+
+    @property
+    def walk_minutes(self):
+        """Minutes needed to walk from the origin to the pickup district."""
+        return (manhattan(self.origin, self.pickup_district)
+                * self.model.walk_minutes_per_district)
+
+    @property
+    def walking(self):
+        """Confirmed and still on the way to another pickup district."""
+        return self.status == ASSIGNED and self.pos != self.pickup_district
 
     # --- Derived times (None when not applicable) ---
     @property
@@ -134,7 +158,20 @@ class PassengerAgent(mesa.Agent):
                 self.status = ASSIGNED
                 self.taxi = self.model.agent_by_id[m.sender]
                 self.promised_pickup = m.data["pickup_time"]
+                self.pickup_district = m.data["pickup_district"]
         self.inbox.clear()
+
+    def walk(self):
+        """Phase 5b: a confirmed passenger with another pickup district walks
+        there, one district per walk_minutes_per_district (no congestion),
+        then waits. Taxis only offer pickups the walker reaches first."""
+        if not self.walking:
+            return
+        self.walk_progress += 1
+        if self.walk_progress >= self.model.walk_minutes_per_district:
+            self.walk_progress = 0
+            self.model.grid.move_agent(self, step_towards(self.pos,
+                                                          self.pickup_district))
 
     # --- Events triggered by the taxi ---
     def board(self, taxi, minute):
@@ -290,9 +327,9 @@ class TaxiAgent(mesa.Agent):
         """Stage 2 rule: insert stops only if both districts lie, in order, on
         the current planned route. The driven route does not change."""
         cells = self.route_cells()
-        if passenger.origin not in cells:
+        if passenger.pickup_district not in cells:
             return None
-        i_origin = cells.index(passenger.origin)
+        i_origin = cells.index(passenger.pickup_district)
         later = cells[i_origin + 1 :]
         if passenger.destination not in later:
             return None
@@ -316,23 +353,48 @@ class TaxiAgent(mesa.Agent):
             + self.stops[n_before_drop:]
         )
 
-    def best_plan(self, passenger):
-        """Feasible plan with the earliest pickup; ties: earliest finish.
+    def pickup_districts(self, passenger):
+        """The origin and, with walk_radius 1, each adjacent district inside
+        the grid (except the destination: no walking the whole trip)."""
+        districts = [passenger.origin]
+        if self.model.walk_radius:
+            x, y = passenger.origin
+            for cell in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                if (0 <= cell[0] < self.model.width and 0 <= cell[1] < self.model.height
+                        and cell != passenger.destination):
+                    districts.append(cell)
+        return districts
 
-        Returns (stops, estimated pickup minute) or None."""
+    def best_plan(self, passenger):
+        """Feasible plan with the earliest pickup; ties: earliest finish, then
+        no walking. A walking pickup must be reachable on foot (walking starts
+        at the CONFIRM, this minute) no later than the taxi gets there.
+
+        The passenger is WAITING, so no stop list holds it yet: its
+        pickup_district can be set per candidate and is restored afterwards.
+        Returns (stops, estimated pickup minute, pickup district) or None."""
         best = None
-        for stops in self.candidate_plans(passenger):
-            result = self.evaluate(stops)
-            if result is None:
-                continue
-            pickup_times, finish = result
-            key = (pickup_times[passenger], finish)
-            if best is None or key < best[0]:
-                best = (key, stops)
+        try:
+            for district in self.pickup_districts(passenger):
+                passenger.pickup_district = district
+                walk_done = self.model.minute + passenger.walk_minutes
+                walked = district != passenger.origin
+                for stops in self.candidate_plans(passenger):
+                    result = self.evaluate(stops)
+                    if result is None:
+                        continue
+                    pickup_times, finish = result
+                    if walked and pickup_times[passenger] < walk_done:
+                        continue  # the taxi would have to wait for the walker
+                    key = (pickup_times[passenger], finish, walked)
+                    if best is None or key < best[0]:
+                        best = (key, stops, district)
+        finally:
+            passenger.pickup_district = passenger.origin
         if best is None:
             return None
-        (pickup_time, _), stops = best
-        return stops, pickup_time
+        (pickup_time, _, _), stops, district = best
+        return stops, pickup_time, district
 
     # --- Messaging phases ---
     def handle_requests(self):
@@ -350,6 +412,7 @@ class TaxiAgent(mesa.Agent):
                     {
                         "can_accept": plan is not None,
                         "eta": None if plan is None else plan[1] - self.model.minute,
+                        "pickup_district": None if plan is None else plan[2],
                     },
                     self.model.minute,
                 )
@@ -367,11 +430,14 @@ class TaxiAgent(mesa.Agent):
             passenger = self.model.agent_by_id[m.sender]
             plan = self.best_plan(passenger)
             if plan is not None and passenger.status == WAITING:
-                self.stops, pickup_time = plan
+                self.stops, pickup_time, district = plan
                 # Recorded here (not when the passenger reads the CONFIRM) so
-                # later ACCEPTs in this same phase already respect it.
+                # later ACCEPTs in this same phase already respect them: the
+                # new stops refer to the agreed pickup district.
                 self.promised_pickup[passenger] = pickup_time
-                reply, data = CONFIRM, {"pickup_time": pickup_time}
+                passenger.pickup_district = district
+                reply, data = CONFIRM, {"pickup_time": pickup_time,
+                                        "pickup_district": district}
             else:
                 reply, data = REJECT, {}
             self.model.send(

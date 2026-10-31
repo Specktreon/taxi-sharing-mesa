@@ -23,7 +23,7 @@ from agents import (ABANDONED, ASSIGNED, NOT_COMPLETED, PICKUP, WAITING,
 from config import (ARRIVAL_MODES, BOARDING_MINUTES, CAPACITIES, CENTER_FACTOR,
                     CONGESTION_CENTER_SIZE, CONGESTION_MODES, DEFAULTS,
                     MAX_EXTRA_DELAY_MINUTES, PATIENCE_MIN, RING_FACTOR,
-                    SHARING_MODES)
+                    SHARING_MODES, WALK_MINUTES_PER_DISTRICT)
 from model import TaxiModel
 from routing import congestion_center
 
@@ -38,6 +38,7 @@ TAXI_COLORS = {
 WAITING_COLOR = "#e53935"  # red: no taxi yet
 ASSIGNED_COLOR = "#fdd835"  # yellow: a taxi is on its way
 ABANDONED_COLOR = "#8d6e63"  # brown ring: gave up waiting
+WALK_COLOR = "#00897b"  # teal diamond + arrow: walking to the pickup district
 RING_SHADE = "#fff1dc"  # congestion ring (light)
 CENTER_SHADE = "#fde0b8"  # congested centre (a little darker)
 TEXT_OUTLINE = [patheffects.withStroke(linewidth=2.2, foreground="white")]
@@ -115,9 +116,13 @@ def draw_city(model, fig=None):
     # Passengers outside taxis, grouped per district (count when > 1).
     groups = Counter()
     gave_up = Counter()
+    walkers = []
     for p in model.passengers:
         if p.status == ABANDONED:
             gave_up[p.origin] += 1  # left the grid; marked where they waited
+            continue
+        if p.walking:
+            walkers.append((p.pos, p.pickup_district))
             continue
         if p.pos is None:
             continue  # completed: left the map
@@ -147,8 +152,16 @@ def draw_city(model, fig=None):
                    edgecolors="#333333", linewidths=0.5, zorder=4)
     if crosses:
         ax.scatter(*zip(*crosses), marker="x", s=30, c="black", zorder=4)
+    for (x, y), target in walkers:
+        ax.annotate("", xy=target, xytext=(x, y), zorder=4,
+                    arrowprops={"arrowstyle": "->", "color": WALK_COLOR,
+                                "linewidth": 1.1, "linestyle": "--"})
+    if walkers:
+        diamonds = [(x - 0.27, y - 0.27) for (x, y), _ in walkers]
+        ax.scatter(*zip(*diamonds), marker="D", s=26, c=WALK_COLOR,
+                   edgecolors="#333333", linewidths=0.5, zorder=4)
     if gave_up:
-        rings = [(x - 0.28, y - 0.28) for x, y in gave_up]
+        rings =[(x - 0.28, y - 0.28) for x, y in gave_up]
         ax.scatter(*zip(*rings), marker="o", s=30, facecolors="none",
                    edgecolors=ABANDONED_COLOR, linewidths=1.3, zorder=4)
         for (x, y), count in gave_up.items():
@@ -188,6 +201,9 @@ def draw_city(model, fig=None):
         Line2D([], [], marker="o", ls="", markerfacecolor="none",
                markeredgecolor=ABANDONED_COLOR, markeredgewidth=1.3,
                label="abandoned (gave up waiting)"),
+        Line2D([], [], marker="D", ls="--", color=WALK_COLOR,
+               markeredgecolor="#333333", markersize=5,
+               label="walking to pickup district"),
     ]
     if model.congestion != "off":
         handles += [
@@ -219,6 +235,8 @@ def StatusPanel(model):
     status = "running" if model.running else "finished (deadline reached)"
     patience = ("off" if model.patience_max is None
                 else f"{model.patience_min}-{model.patience_max} min")
+    walking = (f"to neighbour district ({model.walk_minutes_per_district} min/district)"
+               if model.walk_radius else "off")
     text = f"""
 ### Minute {model.minute} / {model.duration} — {status}
 
@@ -226,6 +244,7 @@ def StatusPanel(model):
 sharing `{model.sharing_mode}` · arrivals `{model.arrival_mode}`
 (window {model.arrival_window} min) · boarding {model.boarding_minutes} min/stop ·
 patience {patience} · congestion `{model.congestion}` ·
+walking {walking} ·
 max extra delay {model.max_extra_delay} min · {model.width}×{model.height} districts ·
 seed {model.seed}
 
@@ -242,6 +261,7 @@ seed {model.seed}
 | Avg extra delay (completed, n={m['completed']}) | {fmt(m['avg_extra_delay_completed'])} min |
 | Avg extra delay (shared rides, n={m['shared_completed']}) | {fmt(m['avg_extra_delay_shared'])} min |
 | Avg waiting incl. unserved (all, n={m['created']}) | {fmt(m['avg_wait_censored'])} min |
+| Walked to a neighbour district (completed) | {fmt(m['walked_pct'])} % · avg walk {fmt(m['avg_walk_minutes'])} min |
 | Taxi distance: total / empty / occupied | {m['total_distance']} / {m['empty_distance']} / {m['occupied_distance']} districts |
 | Empty distance share | {fmt(m['empty_distance_pct'])} % |
 | Passenger distance (passenger-districts) | {m['passenger_distance']} |
@@ -254,6 +274,10 @@ seed {model.seed}
 
 
 model_params = {
+    "width": {"type": "SliderInt", "value": DEFAULTS["width"],
+              "label": "Grid width (districts)", "min": 10, "max": 40, "step": 1},
+    "height": {"type": "SliderInt", "value": DEFAULTS["height"],
+               "label": "Grid height (districts)", "min": 10, "max": 40, "step": 1},
     "num_taxis": {"type": "SliderInt", "value": DEFAULTS["num_taxis"],
                   "label": "Number of taxis", "min": 1, "max": 20, "step": 1},
     "num_passengers": {"type": "SliderInt", "value": DEFAULTS["num_passengers"],
@@ -274,6 +298,13 @@ model_params = {
                      "max": 60, "step": 1},
     "congestion": {"type": "Select", "value": DEFAULTS["congestion"],
                    "values": list(CONGESTION_MODES), "label": "Traffic congestion"},
+    # Checkbox gives a bool; TaxiModel stores int(walk_radius), i.e. 0 or 1.
+    "walk_radius": {"type": "Checkbox", "value": bool(DEFAULTS["walk_radius"]),
+                    "label": "Walk to neighbour district"},
+    "walk_minutes_per_district": {"type": "SliderInt",
+                                  "value": WALK_MINUTES_PER_DISTRICT,
+                                  "label": "Walking time per district (min)",
+                                  "min": 1, "max": 10, "step": 1},
     "arrival_mode": {"type": "Select", "value": DEFAULTS["arrival_mode"],
                      "values": list(ARRIVAL_MODES), "label": "Passenger arrivals"},
     "arrival_window": {"type": "SliderInt", "value": DEFAULTS["arrival_window"],

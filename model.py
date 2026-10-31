@@ -26,6 +26,8 @@ from config import (
     PATIENCE_MAX,
     PATIENCE_MIN,
     SHARING_MODES,
+    WALK_MINUTES_PER_DISTRICT,
+    WALK_RADII,
 )
 from routing import congestion_factor, grid_path, travel_time
 
@@ -68,7 +70,8 @@ class TaxiModel(mesa.Model):
         2. taxis answer with PROPOSE (estimated pickup time, can_accept)
         3. passengers send ACCEPT to the taxi with the lowest estimate
         4. taxis CONFIRM (and update their stops) or REJECT
-        5. passengers read the replies
+        5. passengers read the replies; confirmed passengers with a pickup in
+           a neighbouring district walk towards it
         6. taxis spend one minute driving towards the next district (entering
            it takes cell_minutes[district]) or boarding/alighting
            (boarding_minutes at every pickup and drop-off)
@@ -89,6 +92,8 @@ class TaxiModel(mesa.Model):
         arrival_window=DEFAULTS["arrival_window"],
         duration=DEFAULTS["duration"],
         congestion=DEFAULTS["congestion"],
+        walk_radius=DEFAULTS["walk_radius"],
+        walk_minutes_per_district=WALK_MINUTES_PER_DISTRICT,
         minutes_per_district=MINUTES_PER_DISTRICT,
         boarding_minutes=BOARDING_MINUTES,
         patience_min=PATIENCE_MIN,
@@ -110,6 +115,9 @@ class TaxiModel(mesa.Model):
             raise ValueError(f"capacity must be one of {CAPACITIES}")
         if congestion not in CONGESTION_MODES:
             raise ValueError(f"congestion must be one of {CONGESTION_MODES}")
+        if int(walk_radius) not in WALK_RADII or walk_minutes_per_district < 1:
+            raise ValueError(f"walk_radius must be one of {WALK_RADII}, "
+                             "walk_minutes_per_district >= 1")
         if duration < 1 or minutes_per_district < 1 or boarding_minutes < 0:
             raise ValueError("duration and minutes_per_district must be >= 1, "
                              "boarding_minutes >= 0")
@@ -126,6 +134,8 @@ class TaxiModel(mesa.Model):
         self.arrival_window = max(1, min(int(arrival_window), self.duration))
         self.minutes_per_district = minutes_per_district
         self.congestion = congestion
+        self.walk_radius = int(walk_radius)  # also accepts a UI checkbox bool
+        self.walk_minutes_per_district = int(walk_minutes_per_district)
         # Minutes needed to enter each district (integer: one step = 1 minute).
         self.cell_minutes = {
             (x, y): minutes_per_district
@@ -218,6 +228,7 @@ class TaxiModel(mesa.Model):
             passengers.do("choose_taxi")
             taxis.do("handle_accepts")
             passengers.do("read_replies")
+            passengers.do("walk")
         taxis.do("move")
 
         self.minute += 1
