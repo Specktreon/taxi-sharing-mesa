@@ -20,6 +20,16 @@ BOARDING_MINUTES = 1
 PATIENCE_MIN = 10
 PATIENCE_MAX = None
 
+# Traffic congestion (parameter `congestion`):
+#   "off"    every district costs minutes_per_district to enter.
+#   "center" the central CONGESTION_CENTER_SIZE x CONGESTION_CENTER_SIZE
+#            districts cost CENTER_FACTOR times that, the ring of districts
+#            around them RING_FACTOR times; all others factor 1.
+CONGESTION_MODES = ("off", "center")
+CONGESTION_CENTER_SIZE = 6
+CENTER_FACTOR = 3
+RING_FACTOR = 2
+
 # Allowed taxi capacities (seats).
 CAPACITIES = (1, 2, 3, 4)
 
@@ -56,5 +66,6 @@ DEFAULTS = {
     "arrival_mode": "all_at_start",
     "arrival_window": 60,
     "duration": 60,
+    "congestion": "off",
     "seed": 1,
 }

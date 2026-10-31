@@ -107,7 +107,7 @@ and start again with `python -m solara run app.py`.
 |---|---|
 | `config.py` | Constants (`MAX_EXTRA_DELAY_MINUTES = 10`, `MINUTES_PER_DISTRICT = 1`, `BOARDING_MINUTES = 1`, `CAPACITIES`, `BOOKINGS_PER_SEAT = 2`) and defaults |
 | `messages.py` | `Message` class and message types |
-| `routing.py` | Manhattan distance, grid path, travel-time estimate |
+| `routing.py` | Manhattan distance, x-first grid path, congestion factors |
 | `agents.py` | `TaxiAgent`, `PassengerAgent` (Mesa agents), route planning, sharing rules |
 | `model.py` | `TaxiModel`: `MultiGrid`, demand generation, step phases, deadline, `DataCollector` |
 | `metrics.py` | Metric definitions used by the model, the UI and the experiments |
@@ -190,8 +190,22 @@ Mesa's agents and scheduling.
 
 ## 5. Movement and sharing rules
 
-**Movement.** Taxis follow the shortest grid path ("x first, then y"). Each cell
-takes `MINUTES_PER_DISTRICT` minutes, so taxis never teleport.
+**Movement.** Taxis follow the shortest grid path ("x first, then y"). Entering
+a cell takes `MINUTES_PER_DISTRICT` x that cell's congestion factor minutes,
+so taxis never teleport. All costs are whole minutes, because one step is one
+minute.
+
+**Traffic congestion (parameter `congestion`, default `"off"`).**
+
+| Value | Congestion factor per district |
+|---|---|
+| `off` | 1 everywhere |
+| `center` | 3 in the central 6x6 districts (x, y in 7-12 on the 20x20 grid), 2 in the ring of districts around them (6-13), 1 elsewhere |
+
+The UI has a *Traffic congestion* select and shades the two zones on the map.
+`experiments.csv` may contain an optional `congestion` column; without it every
+run uses `"off"`. With `"off"` every result is identical to the model without
+congestion.
 
 **Boarding time (delay when reaching a passenger).** At every pickup and every
 drop-off, the taxi stays `boarding_minutes` in the district (default
@@ -201,12 +215,14 @@ reproduces the behaviour of stages 1-2 before boarding time was added.
 
 **Estimates vs actual movement.**
 
-- Route **planning** uses *estimates*: Manhattan distance x minutes per
-  district, plus `boarding_minutes` per stop, starting from the taxi's cell
-  once its current stop is finished.
+- Route **planning** uses *estimates*: the sum of the cell costs along the
+  same x-first path the taxi will drive, plus `boarding_minutes` per stop,
+  starting from the taxi's cell once its current stop is finished. Minutes
+  the taxi has already driven towards its next cell are credited on that
+  cell (it still needs at least one more minute to enter it).
 - **Actual** times are measured from the simulated movement.
-- With 1 minute per district the two are equal. With slower speeds, the
-  estimate ignores time already spent towards the next cell.
+- The two are always equal: planning uses exactly the costs and rules of the
+  movement, with or without congestion.
 
 **Sharing modes** (parameter `sharing_mode`):
 
@@ -252,10 +268,13 @@ plan is feasible, the request is refused and the existing route is kept.
 `MAX_EXTRA_DELAY_MINUTES = 10` stays the same in every experiment.
 
 **Individual journey time baseline:**
-`2 x boarding_minutes + direct Manhattan distance x minutes per district`.
-That is the time to board, drive the shortest path alone, and alight, with no
-waiting and no detour. A passenger travelling alone on a direct route
-therefore has an extra delay of exactly 0.
+`2 x boarding_minutes + travel time of the direct x-first path` (sum of its
+cell costs, so congestion included). That is the time to board, drive the
+shortest path alone, and alight, with no waiting and no detour. A passenger
+travelling alone on a direct route therefore has an extra delay of exactly 0.
+Under congestion, a shared ride can follow a different path between the same
+two districts; if that path avoids slow cells, the extra delay can be
+negative.
 
 ## 6. Metrics
 
@@ -339,8 +358,12 @@ duration.
 
 ## 8. Assumptions and limitations
 
-- The grid is abstract: no road network, no traffic, no congestion. All taxis
-  have the same speed.
+- The grid is abstract: no road network and no traffic from other vehicles.
+  All taxis have the same speed.
+- Congestion is a fixed, optional pattern of integer slowdown factors (centre
+  x3, ring x2). It does not change over time and does not depend on how many
+  taxis are in a district. Routes do **not** avoid congestion: taxis keep the
+  x-first path even when a detour around the centre would be faster.
 - Every pickup and drop-off takes the same fixed time (`boarding_minutes`).
 - Taxi assignment is a one-round, greedy auction run each minute. A passenger
   accepts the lowest estimated pickup time. If that taxi has just been taken by

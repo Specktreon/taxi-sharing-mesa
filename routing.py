@@ -2,9 +2,14 @@
 
 Taxis drive on a regular grid without diagonal moves. The route between two
 districts is the "x first, then y" Manhattan path, which is always a shortest
-path. Planning uses travel-time ESTIMATES (distance * minutes_per_district);
-the actual movement happens one cell at a time in TaxiAgent.move().
+path in districts (it does not avoid congestion). Entering a district costs
+minutes_per_district x its congestion factor; planning sums these costs along
+the same path (TaxiModel.travel_time) and the actual movement happens one cell
+at a time in TaxiAgent.move().
 """
+
+from config import (CENTER_FACTOR, CONGESTION_CENTER_SIZE, CONGESTION_MODES,
+                    RING_FACTOR)
 
 
 def manhattan(a, b):
@@ -34,5 +39,27 @@ def grid_path(start, end):
 
 
 def travel_time(a, b, minutes_per_district):
-    """Estimated travel time in minutes between two districts."""
+    """Travel time in minutes between two districts without congestion."""
     return manhattan(a, b) * minutes_per_district
+
+
+def congestion_center(width, height):
+    """Lower-left cell (x0, y0) of the central congested square."""
+    return ((width - CONGESTION_CENTER_SIZE) // 2,
+            (height - CONGESTION_CENTER_SIZE) // 2)
+
+
+def congestion_factor(cell, width, height, mode):
+    """Integer factor on the time to enter `cell`: CENTER_FACTOR inside the
+    central square, RING_FACTOR in the ring of cells around it, else 1."""
+    if mode not in CONGESTION_MODES:
+        raise ValueError(f"congestion must be one of {CONGESTION_MODES}")
+    if mode == "off":
+        return 1
+    x0, y0 = congestion_center(width, height)
+    last = CONGESTION_CENTER_SIZE - 1
+    # Chebyshev distance from the cell to the central square (0 = inside).
+    dx = max(x0 - cell[0], 0, cell[0] - (x0 + last))
+    dy = max(y0 - cell[1], 0, cell[1] - (y0 + last))
+    ring = max(dx, dy)
+    return CENTER_FACTOR if ring == 0 else RING_FACTOR if ring == 1 else 1

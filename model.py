@@ -19,6 +19,7 @@ from config import (
     ARRIVAL_MODES,
     BOARDING_MINUTES,
     CAPACITIES,
+    CONGESTION_MODES,
     DEFAULTS,
     MAX_EXTRA_DELAY_MINUTES,
     MINUTES_PER_DISTRICT,
@@ -26,6 +27,7 @@ from config import (
     PATIENCE_MIN,
     SHARING_MODES,
 )
+from routing import congestion_factor, grid_path, travel_time
 
 
 def generate_scenario(seed, width, height, num_taxis, num_passengers, arrival_mode,
@@ -67,7 +69,8 @@ class TaxiModel(mesa.Model):
         3. passengers send ACCEPT to the taxi with the lowest estimate
         4. taxis CONFIRM (and update their stops) or REJECT
         5. passengers read the replies
-        6. taxis spend one minute driving one district or boarding/alighting
+        6. taxis spend one minute driving towards the next district (entering
+           it takes cell_minutes[district]) or boarding/alighting
            (boarding_minutes at every pickup and drop-off)
         7. clock advances; passengers still WAITING after their patience
            ABANDON; at the deadline unfinished passengers are marked
@@ -85,6 +88,7 @@ class TaxiModel(mesa.Model):
         arrival_mode=DEFAULTS["arrival_mode"],
         arrival_window=DEFAULTS["arrival_window"],
         duration=DEFAULTS["duration"],
+        congestion=DEFAULTS["congestion"],
         minutes_per_district=MINUTES_PER_DISTRICT,
         boarding_minutes=BOARDING_MINUTES,
         patience_min=PATIENCE_MIN,
@@ -104,6 +108,8 @@ class TaxiModel(mesa.Model):
             raise ValueError(f"arrival_mode must be one of {ARRIVAL_MODES}")
         if int(capacity) not in CAPACITIES:
             raise ValueError(f"capacity must be one of {CAPACITIES}")
+        if congestion not in CONGESTION_MODES:
+            raise ValueError(f"congestion must be one of {CONGESTION_MODES}")
         if duration < 1 or minutes_per_district < 1 or boarding_minutes < 0:
             raise ValueError("duration and minutes_per_district must be >= 1, "
                              "boarding_minutes >= 0")
@@ -119,6 +125,13 @@ class TaxiModel(mesa.Model):
         self.duration = int(duration)
         self.arrival_window = max(1, min(int(arrival_window), self.duration))
         self.minutes_per_district = minutes_per_district
+        self.congestion = congestion
+        # Minutes needed to enter each district (integer: one step = 1 minute).
+        self.cell_minutes = {
+            (x, y): minutes_per_district
+            * congestion_factor((x, y), width, height, congestion)
+            for x in range(width) for y in range(height)
+        }
         self.boarding_minutes = int(boarding_minutes)
         self.patience_min = int(patience_min)
         # None or 0 disables abandonment (0 lets a UI slider switch it off).
@@ -170,6 +183,13 @@ class TaxiModel(mesa.Model):
         self.spawn_due_passengers()
         self.running = True
         self.collect()
+
+    def travel_time(self, a, b):
+        """Minutes to drive from a to b: the cost of every district entered
+        along the x-first grid path, i.e. exactly what TaxiAgent.move() takes."""
+        if self.congestion == "off":
+            return travel_time(a, b, self.minutes_per_district)  # same, faster
+        return sum(self.cell_minutes[cell] for cell in grid_path(a, b))
 
     # --- Messaging ---
     def send(self, message):

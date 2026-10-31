@@ -3,8 +3,9 @@
 Timing (all in simulated minutes; b = boarding_minutes, at every stop):
     pickup_time      = minute the taxi reaches the origin (boarding starts)
     arrival_time     = minute alighting at the destination ends
-    individual time  = 2*b + direct distance * minutes_per_district
-                       (board, drive the shortest path alone, alight)
+    individual time  = 2*b + travel time of the direct x-first path
+                       (board, drive it alone, alight); the travel time sums
+                       minutes_per_district x congestion factor per district
     waiting time     = pickup - request
     in-vehicle time  = arrival - pickup  (includes own boarding/alighting and
                        any detours and other passengers' stops)

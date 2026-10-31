@@ -14,13 +14,17 @@ import solara
 from matplotlib import patheffects
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch, Rectangle
 from mesa.visualization import SolaraViz
 
 from agents import (ABANDONED, ASSIGNED, NOT_COMPLETED, PICKUP, WAITING,
                     stop_district)
-from config import (ARRIVAL_MODES, BOARDING_MINUTES, CAPACITIES, DEFAULTS,
-                    MAX_EXTRA_DELAY_MINUTES, PATIENCE_MIN, SHARING_MODES)
+from config import (ARRIVAL_MODES, BOARDING_MINUTES, CAPACITIES, CENTER_FACTOR,
+                    CONGESTION_CENTER_SIZE, CONGESTION_MODES, DEFAULTS,
+                    MAX_EXTRA_DELAY_MINUTES, PATIENCE_MIN, RING_FACTOR,
+                    SHARING_MODES)
 from model import TaxiModel
+from routing import congestion_center
 
 # One consistent legend for the grid.
 TAXI_COLORS = {
@@ -33,6 +37,8 @@ TAXI_COLORS = {
 WAITING_COLOR = "#e53935"  # red: no taxi yet
 ASSIGNED_COLOR = "#fdd835"  # yellow: a taxi is on its way
 ABANDONED_COLOR = "#8d6e63"  # brown ring: gave up waiting
+RING_SHADE = "#fff1dc"  # congestion ring (light)
+CENTER_SHADE = "#fde0b8"  # congested centre (a little darker)
 TEXT_OUTLINE = [patheffects.withStroke(linewidth=2.2, foreground="white")]
 
 
@@ -41,7 +47,8 @@ def draw_city(model, fig=None):
 
     A custom drawing (instead of Mesa's make_space_component) because the
     taxis' planned routes and stops come from the model, not from single
-    agents. Layers: district grid, planned routes, planned stops, waiting
+    agents. Layers: congestion zones (when on), district grid, planned
+    routes, planned stops, waiting
     passengers (one marker per district with a count), abandoned passengers
     (at their origin), taxis with an "on board / capacity" label.
     """
@@ -62,6 +69,14 @@ def draw_city(model, fig=None):
         spine.set_color("#cccccc")
     status = "running" if model.running else "finished"
     ax.set_title(f"Minute {model.minute} / {model.duration} ({status})", fontsize=11)
+
+    # Congestion zones: the ring square first, the centre square on top.
+    if model.congestion != "off":
+        x0, y0 = congestion_center(w, h)
+        for pad, color in ((1, RING_SHADE), (0, CENTER_SHADE)):
+            size = CONGESTION_CENTER_SIZE + 2 * pad
+            ax.add_patch(Rectangle((x0 - pad - 0.5, y0 - pad - 0.5), size, size,
+                                   facecolor=color, edgecolor="none", zorder=0))
 
     # Planned routes and stops, in the colour of the taxi's state.
     pickups, dropoffs = [], []
@@ -158,6 +173,11 @@ def draw_city(model, fig=None):
                markeredgecolor=ABANDONED_COLOR, markeredgewidth=1.3,
                label="abandoned (gave up waiting)"),
     ]
+    if model.congestion != "off":
+        handles += [
+            Patch(facecolor=CENTER_SHADE, label=f"congestion x{CENTER_FACTOR} (centre)"),
+            Patch(facecolor=RING_SHADE, label=f"congestion x{RING_FACTOR} (ring)"),
+        ]
     ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.02, 1),
               fontsize=8, frameon=False, alignment="left",
               title="2/4 = on board / seats\nnumber in dot = passengers there",
@@ -189,7 +209,7 @@ def StatusPanel(model):
 **Configuration:** {len(model.taxis)} taxis · capacity {model.capacity} ·
 sharing `{model.sharing_mode}` · arrivals `{model.arrival_mode}`
 (window {model.arrival_window} min) · boarding {model.boarding_minutes} min/stop ·
-patience {patience} ·
+patience {patience} · congestion `{model.congestion}` ·
 max extra delay {model.max_extra_delay} min · {model.width}×{model.height} districts ·
 seed {model.seed}
 
@@ -236,6 +256,8 @@ model_params = {
     "patience_max": {"type": "SliderInt", "value": 0,
                      "label": "Patience max (min, 0 = never abandon)", "min": 0,
                      "max": 60, "step": 1},
+    "congestion": {"type": "Select", "value": DEFAULTS["congestion"],
+                   "values": list(CONGESTION_MODES), "label": "Traffic congestion"},
     "arrival_mode": {"type": "Select", "value": DEFAULTS["arrival_mode"],
                      "values": list(ARRIVAL_MODES), "label": "Passenger arrivals"},
     "arrival_window": {"type": "SliderInt", "value": DEFAULTS["arrival_window"],

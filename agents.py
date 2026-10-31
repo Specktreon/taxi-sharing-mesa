@@ -4,7 +4,7 @@ import mesa
 
 from config import BOOKINGS_PER_SEAT
 from messages import ACCEPT, CONFIRM, PROPOSE, REJECT, REQUEST, Message
-from routing import grid_path, step_towards, travel_time
+from routing import grid_path, step_towards
 
 # Passenger statuses
 WAITING = "waiting"  # requested a taxi, no taxi confirmed yet
@@ -54,11 +54,11 @@ class PassengerAgent(mesa.Agent):
         self.shared = False  # True if another passenger rode with them
         self.ride_distance = 0  # districts driven while on board
         self.inbox = []
-        # Baseline: boarding + direct shortest-path drive + alighting, alone,
-        # without waiting. A solo direct trip therefore has extra delay 0.
+        # Baseline: boarding + direct x-first drive (with congestion costs) +
+        # alighting, alone, without waiting. A solo direct trip therefore has
+        # extra delay 0.
         self.individual_time = (
-            travel_time(origin, destination, model.minutes_per_district)
-            + 2 * model.boarding_minutes
+            model.travel_time(origin, destination) + 2 * model.boarding_minutes
         )
 
     # --- Derived times (None when not applicable) ---
@@ -188,15 +188,17 @@ class TaxiAgent(mesa.Agent):
           - gives any passenger more than MAX extra in-vehicle delay, or
           - delays an assigned passenger's pickup more than MAX minutes past
             the time promised in their CONFIRM.
-        Estimates: travel = distance * minutes_per_district, plus
-        boarding_minutes at every stop. The taxi starts from its cell once the
-        stop it is serving is finished (in-cell driving progress is ignored,
-        which is exact when minutes_per_district == 1).
+        Estimates: travel = model.travel_time (cost of every district entered
+        on the x-first path), plus boarding_minutes at every stop. The taxi
+        starts from its cell once the stop it is serving is finished; minutes
+        already driven towards the next cell (progress) are credited on the
+        first district entered, as in move(). Estimates are therefore exact.
         """
         model = self.model
         boarding = model.boarding_minutes
         t = model.minute + self.dwell
         position = self.pos
+        credit = self.progress
         alighting = None
         if self.dwell and self.current_stop[0] == DROPOFF:
             alighting = self.current_stop[1]
@@ -204,7 +206,13 @@ class TaxiAgent(mesa.Agent):
         pickup_times = {p: p.pickup_time for p in self.onboard if p is not alighting}
         for kind, passenger in stops:
             district = stop_district((kind, passenger))
-            t += travel_time(position, district, model.minutes_per_district)
+            if district != position:
+                t += model.travel_time(position, district)
+                if credit:
+                    # Entering the first cell takes at least one more minute.
+                    first = model.cell_minutes[step_towards(position, district)]
+                    t -= min(credit, first - 1)
+                    credit = 0
             position = district
             if kind == PICKUP:
                 if passenger in pickup_times:
@@ -403,8 +411,9 @@ class TaxiAgent(mesa.Agent):
                 p.shared = True
 
     def move(self):
-        """Phase 6: spend one minute boarding/alighting or driving one step
-        along the route (no teleporting)."""
+        """Phase 6: spend one minute boarding/alighting or driving towards the
+        next cell on the route; the taxi enters it once progress reaches that
+        cell's cell_minutes (no teleporting)."""
         now = self.model.minute
         self.update_state()
         self.serve_stops(now)
@@ -419,9 +428,9 @@ class TaxiAgent(mesa.Agent):
         if self.stops:
             self.count_minute()
             self.progress += 1
-            if self.progress >= self.model.minutes_per_district:
+            new_pos = step_towards(self.pos, stop_district(self.stops[0]))
+            if self.progress >= self.model.cell_minutes[new_pos]:
                 self.progress = 0
-                new_pos = step_towards(self.pos, stop_district(self.stops[0]))
                 self.model.grid.move_agent(self, new_pos)
                 for p in self.onboard:
                     self.model.grid.move_agent(p, new_pos)
