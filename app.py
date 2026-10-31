@@ -6,6 +6,7 @@ then open the printed URL (default http://localhost:8765).
 Use the sidebar to change parameters, then Reset / Step / Play.
 """
 
+import inspect
 import math
 from collections import Counter
 
@@ -40,6 +41,21 @@ ABANDONED_COLOR = "#8d6e63"  # brown ring: gave up waiting
 RING_SHADE = "#fff1dc"  # congestion ring (light)
 CENTER_SHADE = "#fde0b8"  # congested centre (a little darker)
 TEXT_OUTLINE = [patheffects.withStroke(linewidth=2.2, foreground="white")]
+
+
+class UITaxiModel(TaxiModel):
+    """TaxiModel for the sliders: if Patience min > Patience max while
+    abandonment is on, the two are swapped instead of raising on Reset."""
+
+    def __init__(self, **kwargs):
+        low = kwargs.get("patience_min", PATIENCE_MIN)
+        high = kwargs.get("patience_max")
+        if high and low > high:
+            kwargs["patience_min"], kwargs["patience_max"] = high, low
+        super().__init__(**kwargs)
+
+    # Mesa's Reset inspects the signature to route parameters: show TaxiModel's.
+    __init__.__signature__ = inspect.signature(TaxiModel.__init__)
 
 
 def draw_city(model, fig=None):
@@ -313,7 +329,8 @@ def ChartsPanel(model):
 def Page():
     # One model per browser session; SolaraViz's Reset replaces it with a new
     # model built from the sidebar parameters.
-    model = solara.use_memo(lambda: TaxiModel(capacity=2, sharing_mode="detour"), [])
+    model = solara.use_memo(lambda: UITaxiModel(capacity=2, sharing_mode="detour"),
+                            [])
     # Mesa's dashboard needs the Vue 2 widget stack (ipyvue/ipyvuetify 1.x,
     # pinned in requirements.txt); with the 3.x packages the main area is blank.
     SolaraViz(

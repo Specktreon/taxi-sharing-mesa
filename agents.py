@@ -107,11 +107,18 @@ class PassengerAgent(mesa.Agent):
             )
 
     def choose_taxi(self):
-        """Phase 3: accept the proposal with the lowest estimated pickup time."""
+        """Phase 3: accept the proposal with the lowest estimated pickup time.
+
+        With patience, proposals whose pickup would come after the patience
+        runs out are ignored; with none left the passenger keeps waiting."""
         proposals = [
             m for m in self.inbox if m.type == PROPOSE and m.data["can_accept"]
         ]
         self.inbox.clear()
+        if self.patience is not None:
+            deadline = self.request_time + self.patience
+            proposals = [m for m in proposals
+                         if self.model.minute + m.data["eta"] <= deadline]
         if self.status != WAITING or not proposals:
             return
         # Ties broken by taxi id so runs are deterministic.

@@ -39,6 +39,9 @@ All commands are run from the project folder.
 - number of taxis and number of passengers;
 - capacity (1-4) and sharing mode;
 - boarding time per stop;
+- patience min and patience max (*Patience max* 0 = passengers never abandon;
+  if min > max, the two are swapped on Reset);
+- traffic congestion (`off` / `center`);
 - arrival mode and arrival window;
 - duration and seed.
 
@@ -72,6 +75,9 @@ Map legend:
 | yellow dot | passenger waiting, a taxi is assigned |
 | number in a dot | several passengers waiting in that district |
 | black cross | passenger not completed at the deadline |
+| brown ring | passenger abandoned (gave up waiting), at their origin |
+| darker orange shade | congested centre, x3 (only with congestion on) |
+| light orange shade | congestion ring, x2 (only with congestion on) |
 
 **Experiments.** The configurations are listed in `experiments.csv`. Edit that
 file to define new scenarios; the source code does not need to change. Results
@@ -84,8 +90,15 @@ are written to `results/`:
 - `charts/*.png`: comparison bar charts. `comparison.png` shows all of them
   together.
 
-`experiments.csv` may contain an optional `boarding_minutes` column. Without it,
-every run uses `BOARDING_MINUTES` from `config.py`.
+`experiments.csv` may contain these optional columns. When a column is absent,
+every run uses the default:
+
+| Column | Default when absent |
+|---|---|
+| `boarding_minutes` | `BOARDING_MINUTES` from `config.py` (1) |
+| `patience_min` | `PATIENCE_MIN` from `config.py` (10) |
+| `patience_max` | empty: no abandonment (an empty cell or 0 also disables it for that row) |
+| `congestion` | `off` (or `center`) |
 
 **Troubleshooting.**
 
@@ -133,7 +146,10 @@ Step phases:
 2. Each taxi answers with **PROPOSE**. The proposal holds `can_accept` and `eta`
    (estimated minutes until pickup) for the best feasible plan.
 3. The passenger sends **ACCEPT** to the taxi with the lowest `eta`. Ties go to
-   the lowest taxi id.
+   the lowest taxi id. With patience enabled, the passenger first ignores every
+   proposal whose pickup would come after its patience runs out, keeping only
+   those with `minute + eta <= request_time + patience`. If none is left, it
+   sends no ACCEPT and keeps waiting.
 4. The taxi re-checks the plan, because it may have accepted another passenger
    in this minute. It then either:
    - sends **CONFIRM**, which carries the promised pickup minute, and adopts
@@ -382,6 +398,11 @@ duration.
   Once confirmed, a passenger trusts the promise and never abandons, however
   late the pickup. An abandoned passenger does not request again. The
   experiments in `results/` were run with patience disabled.
+- A passenger only accepts a pickup promised within its patience, but a
+  confirmed pickup can still slip up to `MAX_EXTRA_DELAY_MINUTES` past the
+  promise when the taxi later takes on other passengers. A few accepted trips
+  may therefore still wait longer than their patience; they complete, but do
+  not count in `acceptable_pct`.
 - Idle taxis wait where they are; there is no repositioning.
 - Requests made at or after the deadline are not created.
 - Results depend on the chosen grid size and demand levels. Each configuration
