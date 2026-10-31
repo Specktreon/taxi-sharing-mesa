@@ -85,7 +85,7 @@ ARRIVAL_MODES = ("all_at_start", "gradual")
 
 # Base scenario. num_taxis / num_passengers were calibrated so that sharing
 # "none" with capacity 1 completes roughly 50-70 % of passengers (about 58 %
-# over seeds 1-5); see README section 7.
+# over seeds 1-10); see README section 8.
 DEFAULTS = {
     "width": 30,
     "height": 30,

@@ -6,6 +6,10 @@ Master's project for *Foundations of Agent-Based Systems*.
 served, passenger waiting times, journey times, and taxi distance travelled
 under different simulation configurations?
 
+The model also has four optional features that can be switched on one by one:
+**buses**, **walking** to a neighbouring district, traffic **congestion**, and
+passenger **patience**. Everything else is a fixed study setting (section 4).
+
 ## 1. Installation
 
 Requires Python 3.12+ (developed and tested with Python 3.14.6 and Mesa 3.5.1).
@@ -22,6 +26,12 @@ python -m pip install -r requirements.txt
 Without Conda: create a virtual environment with Python 3.12+ and run
 `python -m pip install -r requirements.txt`.
 
+Check that the environment is really active before running anything:
+`python -c "import sys; print(sys.executable)"` must print the `taxi-mesa`
+Python. If `conda activate` does not work in your terminal, call that Python
+by its full path (for example
+`C:\Users\<you>\anaconda3\envs\taxi-mesa\python.exe -m solara run app.py`).
+
 ## 2. Running
 
 All commands are run from the project folder.
@@ -29,434 +39,439 @@ All commands are run from the project folder.
 | Task | Command |
 |---|---|
 | Interactive visualization | `python -m solara run app.py` then open http://localhost:8765 |
-| All experiments (10 configs x 5 seeds) | `python run_experiments.py` |
-| Selected configurations / seeds | `python run_experiments.py --only C3 C6 --seeds 1 2` |
+| All experiments (S1-S12 x seeds 1-10) | `python run_experiments.py` (about 1 minute) |
+| Selected scenarios / seeds | `python run_experiments.py --only S4 S12 --seeds 1 2` |
 | Tests | `python -m pytest` |
 
-**Visualization.** The sidebar holds the controls: *Reset*, *Step*, and
-▶ / ❚❚ (play/pause). It also holds the model parameters:
+Stop the server with **Ctrl+C** in its terminal.
 
-- grid width and height (10-40 districts each, default 20);
-- number of taxis and number of passengers;
-- capacity (1-4) and sharing mode;
-- boarding time per stop;
-- patience min and patience max (*Patience max* 0 = passengers never abandon;
-  if min > max, the two are swapped on Reset);
-- traffic congestion (`off` / `center`);
-- *Walk to neighbour district* (on = `walk_radius` 1) and walking time per
-  district;
-- arrival mode and arrival window;
-- duration and seed.
+### Sidebar
 
-After changing a parameter, press *Reset* to rebuild the model. The simulation
-stops by itself when the configured duration is reached. Each step redraws two
-images, so Play runs at about 1-2 minutes per second. Raise *Render Interval*
-to go faster.
+Controls: *Reset*, *Step*, and ▶ / ❚❚ (play/pause). Model parameters:
+
+| Control | Values |
+|---|---|
+| Sharing mode | `none`, `no_detour`, `detour` (section 6) |
+| Taxi capacity | 1-4 seats |
+| Number of taxis | 1-40 (base: 20) |
+| Number of passengers | 1-200 (base: 90) |
+| Seed | 1-100 |
+| Buses | on/off (section 6) |
+| Walking to neighbour district | on/off (section 6) |
+| Traffic congestion | on/off (section 5) |
+| Passenger patience | on/off: patience 10-30 min (section 4) |
+
+Every other setting is fixed (section 4). After changing a parameter, press
+*Reset* to rebuild the model. The simulation stops by itself at minute 120.
+Each step redraws two images, so Play runs at about 1-2 minutes per second;
+raise *Render Interval* to go faster.
 
 The page shows:
 
-- the city map (example: `docs/grid_example.png`);
-- a status panel with the minute, configuration, and results table;
+- the city map (example with all four features: `docs/grid_example.png`;
+  also `docs/map_S1.png`, `docs/map_S6.png`, `docs/map_S12.png`, all at
+  minute 40, seed 1);
+- a status panel: minute, configuration, and a results table (with buses on,
+  extra rows compare taxi and bus passengers);
 - a 2x2 chart panel over time: passengers by status, average times, taxi
   distance (total / occupied / empty), and taxi utilization.
 
 The panels can be dragged and resized.
 
-Map legend:
+### Map legend
 
-| Symbol | Meaning |
+A box above the map lists the active features ("Buses on · Walking off ·
+..."). The legend is grouped in sections; only the active ones are shown.
+
+| Section | Symbol | Meaning |
+|---|---|---|
+| Taxis | grey / orange / blue square | taxi idle / driving to a pickup / driving to a drop-off |
+| | green / purple square | taxi stopped: a passenger is boarding / alighting |
+| | `2/4` next to a taxi | passengers on board / seats |
+| | thin line | the taxi's planned route, in the taxi's colour |
+| | ▲ / ▼ | planned pickup / planned drop-off of that taxi |
+| Buses | wide light band | a bus line ("road"), one colour per line (H1, H2, V1, V2) |
+| | small white square | bus stop |
+| | rounded box with `3/10` | bus in its line colour: passengers on board / 10 |
+| Passengers | red dot | taxi passenger waiting, no taxi yet |
+| | yellow dot | taxi passenger waiting, a taxi is assigned |
+| | number in a dot | several passengers in that district |
+| | teal diamond + dashed arrow | taxi passenger walking to a neighbouring pickup district (walking on) |
+| | filled pentagon (line colour) | bus passenger waiting at a stop; number = several |
+| | hollow pentagon | bus passenger walking to the stop or to the destination |
+| | brown ring | passenger who abandoned, at their origin (patience on) |
+| | black cross | passenger not completed at the deadline |
+| Zones | darker / lighter orange | congestion centre x3 / ring x2 (congestion on) |
+
+Bus riders are not drawn separately: they are counted in their bus's label.
+Where two lines cross, two buses in the same district can partly overlap.
+
+### Experiments
+
+The scenarios are listed in `experiments.csv`; edit that file to define new
+ones (the code does not need to change). Results are written to `results/`:
+
+- `runs.csv`: one row per scenario and seed, with all metrics;
+- `summary.csv`: mean and standard deviation over seeds per scenario;
+- `passengers.csv`: every passenger in every run (mode, times, status,
+  walking, extra delay);
+- `charts/*.png`: comparison bar charts, one per metric, and `comparison.png`
+  with all eight. Bars are coloured and hatched by sharing mode; under each
+  scenario id a short tag shows the features switched on (`+bus`, `+walk`,
+  `+cong`, `+pat`, `all 4`).
+
+Columns of `experiments.csv`:
+
+| Column | Meaning |
 |---|---|
-| grey square | idle taxi |
-| orange square | taxi driving to a pickup |
-| blue square | taxi driving to a drop-off |
-| green square | taxi stopped, a passenger is boarding |
-| purple square | taxi stopped, a passenger is alighting |
-| `2/4` next to a taxi | passengers on board / seats |
-| thin line | the taxi's planned route, in the taxi's colour |
-| ▲ / ▼ | planned pickup / planned drop-off of that taxi |
-| red dot | passenger waiting, no taxi yet |
-| yellow dot | passenger waiting, a taxi is assigned |
-| number in a dot | several passengers waiting in that district |
-| black cross | passenger not completed at the deadline |
-| brown ring | passenger abandoned (gave up waiting), at their origin |
-| teal diamond + dashed arrow | passenger walking to a neighbouring pickup district (arrow points to it) |
-| darker orange shade | congested centre, x3 (only with congestion on) |
-| light orange shade | congestion ring, x2 (only with congestion on) |
+| `config_id`, `description` | name and text |
+| `num_taxis`, `num_passengers`, `capacity`, `sharing_mode` | required |
+| `buses`, `walking`, `congestion`, `patience` | optional `True`/`False`, mapped to model parameters exactly like the sidebar checkboxes; absent = off |
+| any other model parameter | optional, for older files: `duration`, `arrival_mode`, `arrival_window`, `width`, `height`, `boarding_minutes`, `walk_radius`, `walk_minutes_per_district`, `patience_min`, `patience_max` (empty = off), `congestion` as `off`/`center`. Absent = the fixed default. |
 
-**Experiments.** The configurations are listed in `experiments.csv`. Edit that
-file to define new scenarios; the source code does not need to change. Results
-are written to `results/`:
-
-- `runs.csv`: one row per configuration and seed, with all metrics.
-- `summary.csv`: mean and standard deviation over seeds for each configuration.
-- `passengers.csv`: every passenger in every run, with times, status, and
-  extra delay.
-- `charts/*.png`: comparison bar charts. `comparison.png` shows all of them
-  together.
-
-`experiments.csv` may contain these optional columns. When a column is absent,
-every run uses the default:
-
-| Column | Default when absent |
-|---|---|
-| `boarding_minutes` | `BOARDING_MINUTES` from `config.py` (1) |
-| `patience_min` | `PATIENCE_MIN` from `config.py` (10) |
-| `patience_max` | empty: no abandonment (an empty cell or 0 also disables it for that row) |
-| `congestion` | `off` (or `center`) |
-| `walk_radius` | 0: no walking (or 1) |
-| `walk_minutes_per_district` | `WALK_MINUTES_PER_DISTRICT` from `config.py` (3) |
-| `width`, `height` | 20 x 20 districts |
-
-**Troubleshooting.**
+### Troubleshooting
 
 - **Blank main area** (only the sidebar is visible; the browser console shows
-  `GlobalVue.use is not a function`): the widget packages are the Vue 3 lines
-  (`ipyvue`/`ipyvuetify` 3.x). Mesa 3.5.1's dashboard needs the Vue 2 lines
-  that `requirements.txt` pins. Run `python -m pip install -r requirements.txt`
-  and restart the server.
+  `GlobalVue.use is not a function`): the server runs in a Python with the
+  Vue 3 widget packages (`ipyvue`/`ipyvuetify` 3.x), usually the base
+  Anaconda Python instead of `taxi-mesa`. Mesa 3.5.1's dashboard needs the
+  Vue 2 lines pinned in `requirements.txt`. Start the server with the
+  `taxi-mesa` Python (section 1).
 - **DLL error:** if `solara run` fails with
-`ImportError: DLL load failed while importing _imaging`, and the traceback shows
-paths of another Python installation, the `VIRTUAL_ENV` environment variable
-points to that installation. IPython then adds its packages to the search path.
-Clear the variable for the session (PowerShell: `Remove-Item Env:VIRTUAL_ENV`)
-and start again with `python -m solara run app.py`.
+  `ImportError: DLL load failed while importing _imaging` and the traceback
+  shows paths of another Python installation, the `VIRTUAL_ENV` environment
+  variable points to that installation and IPython adds its packages to the
+  search path. Clear it (PowerShell: `Remove-Item Env:VIRTUAL_ENV`) and start
+  again.
+- After editing the code, restart the server: Solara's automatic reload can
+  fail on this app.
 
 ## 3. Files
 
 | File | Content |
 |---|---|
-| `config.py` | Constants (`MAX_EXTRA_DELAY_MINUTES = 10`, `MINUTES_PER_DISTRICT = 1`, `BOARDING_MINUTES = 1`, `CAPACITIES`, `BOOKINGS_PER_SEAT = 2`) and defaults |
+| `config.py` | Fixed settings and constants (`MAX_EXTRA_DELAY_MINUTES = 10`, grid, duration, bus, walking, patience and congestion settings), base scenario `DEFAULTS`, `feature_params()` for the four features |
 | `messages.py` | `Message` class and message types |
-| `routing.py` | Manhattan distance, x-first grid path, congestion factors |
-| `agents.py` | `TaxiAgent`, `PassengerAgent` (Mesa agents), route planning, sharing rules |
+| `routing.py` | Manhattan distance, x-first grid path, congestion zones and factors |
+| `agents.py` | `TaxiAgent`, `PassengerAgent` (Mesa agents): messaging, route planning, sharing rules, walking, bus journeys |
+| `buses.py` | `BusLine`, `BusAgent` (Mesa agent), line layout, mode choice (`choose_bus_trip`) |
 | `model.py` | `TaxiModel`: `MultiGrid`, demand generation, step phases, deadline, `DataCollector` |
 | `metrics.py` | Metric definitions used by the model, the UI and the experiments |
-| `app.py` | Mesa `SolaraViz` interface: city map (`draw_city`), status panel, charts |
+| `app.py` | Mesa `SolaraViz` interface: sidebar (`UITaxiModel`), city map (`draw_city`), status panel, charts |
 | `run_experiments.py` | Experiment runner (Mesa `batch_run`), CSV export, charts |
-| `experiments.csv` | The 10 experiment configurations |
-| `tests/` | Pytest test suite (`tests/data/` holds reference results of stage 1-2) |
-| `docs/grid_example.png` | Snapshot of the city map mid-simulation |
+| `experiments.csv` | The 12 scenarios S1-S12 |
+| `tests/` | Pytest suite (`tests/data/` holds reference results of stages 1-2) |
+| `docs/` | Map snapshots (`grid_example.png` = `map_S12.png`, `map_S1.png`, `map_S6.png`) |
 | `REPORT_OUTLINE.md` | Outline for the 5-10 page report |
 
-## 4. Architecture and agent interaction
+## 4. Architecture and fixed settings
 
-- **Space:** a Mesa `MultiGrid` (`width` x `height`, 20x20 by default, not
-  toroidal). Each cell is a district, and several agents can share a cell.
-- **Agents:** `TaxiAgent` and `PassengerAgent` are subclasses of `mesa.Agent`.
-- **Scheduling:** each step uses Mesa's `AgentSet.do()` on
-  `model.agents_by_type[...]`, in fixed phases. One step is one simulated minute.
+- **Space:** a Mesa `MultiGrid`, 30x30, not toroidal. Each cell is a
+  district; several agents can share a cell.
+- **Agents:** `TaxiAgent`, `PassengerAgent` and `BusAgent` are subclasses of
+  `mesa.Agent`.
+- **Scheduling:** each step runs fixed phases with Mesa's `AgentSet.do()` on
+  `model.agents_by_type[...]`. One step is one simulated minute.
 
-Step phases:
+**Fixed settings** (`config.py`; the same in the UI and every experiment):
 
-0. Passengers whose request minute has come are created on their origin cell.
-1. Each waiting passenger sends **REQUEST** (a call for proposals) to every taxi.
-2. Each taxi answers with **PROPOSE**. The proposal holds `can_accept`, `eta`
-   (estimated minutes until pickup) and `pickup_district` for the best feasible
-   plan. With walking on, the taxi runs its plan search for the origin and for
-   each neighbouring district (see section 5) and proposes the best option.
-3. The passenger sends **ACCEPT** to the taxi with the lowest `eta`. Ties go to
-   the lowest taxi id. With patience enabled, the passenger first ignores every
-   proposal whose pickup would come after its patience runs out, keeping only
-   those with `minute + eta <= request_time + patience`. If none is left, it
-   sends no ACCEPT and keeps waiting.
-4. The taxi re-checks the plan, because it may have accepted another passenger
-   in this minute. It then either:
-   - sends **CONFIRM**, which carries the promised pickup minute and the
-     pickup district, and adopts the new stop list; or
-   - sends **REJECT**. A rejected passenger asks again in the next minute.
-5. Passengers read the replies (CONFIRM makes them *assigned*). An assigned
-   passenger whose pickup district is a neighbouring district then walks
-   towards it (one district per `walk_minutes_per_district`) and waits there.
-6. Each taxi spends the minute either driving one cell towards its next stop,
-   or standing still while a passenger boards or alights (`boarding_minutes`
-   per stop). Passengers on board move with their taxi.
-7. The clock advances. If patience is enabled, every passenger who is still
-   *waiting* (no CONFIRM yet) and has waited `patience` minutes becomes
-   **abandoned** and leaves the grid. Assigned passengers never abandon.
-   When `minute == duration`, every passenger who is still waiting, assigned,
-   or travelling becomes **not_completed**, and the model stops.
+| Setting | Value |
+|---|---|
+| City | 30x30 districts |
+| Duration | 120 minutes |
+| Requests | gradual: request minutes uniform in the first 90 minutes |
+| Taxi speed | 1 minute per district (times the congestion factor) |
+| Boarding | 1 minute at every pickup and drop-off (taxis and buses) |
+| Maximum extra delay | `MAX_EXTRA_DELAY_MINUTES = 10` |
+| Patience (when on) | uniform integer in 10-30 minutes |
+| Walking | 3 minutes per district |
+| Buses (when on) | 4 lines, 3 buses each, 10 seats, stops every 3 districts |
+| Base fleet / demand | 20 taxis, 90 passengers (calibrated, section 7) |
 
-**Patience (optional).** Parameters `patience_min` and `patience_max`
-(minutes). Each passenger draws an integer patience uniformly in
-`[patience_min, patience_max]`. The draw uses its own random generator, seeded
-by the seed, in request-list order. Origins, destinations and request minutes
-are therefore the same with or without patience, and passenger *i* gets the
-same patience in every configuration. `patience_max = None` (the default) or
-`0` disables abandonment, and the model then behaves exactly as without this
-feature. In the UI, set *Patience max* above 0 to enable it. In
-`experiments.csv`, add optional `patience_min` / `patience_max` columns (an
-empty `patience_max` cell disables it for that row).
+`TaxiModel` still accepts every parameter (grid size, duration, ...) so tests
+and older experiment files can set them; the UI and `experiments.csv` vary
+only sharing mode, capacity, fleet, demand, seed and the four features.
+
+**Step phases:**
+
+0. Passengers whose request minute has come are created on their origin. Each
+   chooses its mode once, here: the bus if a bus line serves both ends
+   (section 6), otherwise a taxi.
+1. Each waiting taxi passenger sends **REQUEST** (a call for proposals) to
+   every taxi.
+2. Each taxi answers with **PROPOSE**: `can_accept`, `eta` (minutes until
+   pickup) and `pickup_district` of its best feasible plan. With walking on,
+   the taxi searches plans for the origin and each neighbouring district.
+3. The passenger sends **ACCEPT** to the taxi with the lowest `eta` (ties: the
+   lowest taxi id). With patience on, it first ignores every proposal whose
+   pickup would come after its patience runs out
+   (`minute + eta <= request_time + patience`); if none is left it sends no
+   ACCEPT and keeps waiting.
+4. The taxi re-checks the plan (it may have accepted someone else this
+   minute), then sends **CONFIRM** (promised pickup minute and pickup district)
+   and adopts the new stop list, or **REJECT** (the passenger asks again next
+   minute).
+5. Passengers read the replies (CONFIRM makes them *assigned*). Then everyone
+   who walks this minute does: taxi passengers to a neighbouring pickup
+   district, bus passengers to their stop or from it to their destination.
+6. Each taxi drives towards its next stop or stands while a passenger boards
+   or alights; passengers on board move with it. Then each bus drives or
+   stands at a stop.
+7. The clock advances. With patience on, a taxi passenger still *waiting*
+   (no CONFIRM) after `patience` minutes becomes **abandoned** and leaves the
+   grid. At minute 120, everyone still waiting, assigned or travelling becomes
+   **not_completed**, and the model stops.
 
 Messages are delivered by `TaxiModel.send()`, which appends the message to the
-receiver's inbox. Mesa itself has no messaging; nothing else is added on top of
-Mesa's agents and scheduling.
+receiver's inbox; Mesa itself has no messaging. Bus passengers never send
+messages: buses follow fixed lines.
 
-**Taxi state:**
+**Patience (feature).** Each taxi passenger draws an integer patience in
+10-30 minutes from its own random generator (seeded by the seed, in
+request-list order), so demand is identical with or without patience and
+passenger *i* gets the same patience in every scenario. Assigned passengers
+never abandon. Bus passengers have no patience.
 
-- position;
-- capacity;
-- passengers on board;
-- ordered stop list of (pickup/dropoff, passenger);
-- remaining boarding/alighting minutes at the current stop;
-- pickup times promised to assigned passengers;
-- state: idle, to_pickup, travelling, picking_up, or dropping_off;
-- districts driven: total, empty, and occupied;
-- busy minutes and occupied minutes.
+**Taxi state:** position; capacity; passengers on board; ordered stop list of
+(pickup/dropoff, passenger); remaining boarding/alighting minutes; pickup
+times promised to assigned passengers; state (idle, to_pickup, travelling,
+picking_up, dropping_off); districts driven (total, empty, occupied); busy and
+occupied minutes.
 
-**Passenger state:**
+**Passenger state:** origin, destination; mode (taxi/bus); pickup district
+(origin unless walking); for bus passengers the line, boarding and alighting
+stops and the journey stage (to stop, at stop, riding, to destination);
+request, promised pickup, pickup, alighting, arrival and abandon minutes;
+patience; status (waiting, assigned, travelling, completed, not_completed,
+abandoned); whether the ride was shared; districts ridden in a taxi.
 
-- origin, destination, and pickup district (the origin unless they walk);
-- request minute, promised pickup minute, actual pickup minute, arrival
-  minute, and abandon minute;
-- patience (None when disabled);
-- status: waiting, assigned, travelling, completed, not_completed, or
-  abandoned;
-- individual trip time;
-- whether the ride was shared;
-- districts ridden.
+**Bus state:** line, position and direction on the line, passengers on board,
+remaining minutes at the current stop, districts driven and passenger-districts
+carried.
 
-## 5. Movement and sharing rules
+## 5. Movement and congestion
 
-**Movement.** Taxis follow the shortest grid path ("x first, then y"). Entering
-a cell takes `MINUTES_PER_DISTRICT` x that cell's congestion factor minutes,
-so taxis never teleport. All costs are whole minutes, because one step is one
-minute.
+**Movement.** Taxis follow the shortest grid path ("x first, then y").
+Entering a district takes `MINUTES_PER_DISTRICT` x that district's congestion
+factor minutes, so vehicles never teleport. All costs are whole minutes.
 
-**Traffic congestion (parameter `congestion`, default `"off"`).**
+**Traffic congestion (feature).** The central rectangle of one third of the
+grid in each direction (10x10 districts, x and y in 10-19 on 30x30) has factor
+3; the ring of districts around it (9-20) factor 2; all others factor 1. Taxis
+and buses are slowed; walking is not. Routes do not avoid congestion.
 
-| Value | Congestion factor per district |
-|---|---|
-| `off` | 1 everywhere |
-| `center` | 3 in the central 6x6 districts (x, y in 7-12 on the 20x20 grid), 2 in the ring of districts around them (6-13), 1 elsewhere |
+**Boarding time.** At every pickup and drop-off a taxi stands 1 minute in the
+district before driving on; several stops in one district each cost 1 minute.
 
-The UI has a *Traffic congestion* select and shades the two zones on the map.
-`experiments.csv` may contain an optional `congestion` column; without it every
-run uses `"off"`. With `"off"` every result is identical to the model without
-congestion. On other grid sizes the 6x6 centre starts at
-`((width - 6) // 2, (height - 6) // 2)`; from 10x10 up (the UI minimum) the
-centre and its whole ring always fit inside the grid. On odd sizes the centre
-is one district off the exact middle.
+**Estimates vs actual movement.** Route planning sums the district costs along
+the same x-first path the taxi will drive, plus the boarding minutes, starting
+when its current stop is finished; minutes already driven towards the next
+district are credited. Planning therefore uses exactly the costs and rules of
+the movement: estimates equal actual times.
 
-**Walking to a neighbouring district (parameters `walk_radius`, default 0 =
-off, and `walk_minutes_per_district`, default 3).**
+## 6. Sharing, walking and bus rules
 
-- With `walk_radius = 1`, a taxi considers as pickup district the passenger's
-  origin and each adjacent district inside the grid (Manhattan distance 1),
-  except the destination. It runs its normal plan search (any sharing mode)
-  for each one.
-- A walking pickup is allowed only if the passenger can get there first:
-  `current minute + walking time <= the taxi's estimated arrival there`. The
-  passenger only starts walking after the CONFIRM, which is sent in the same
-  minute, so taxis never wait for walkers. (On a passenger's first request,
-  the current minute is the request minute.)
-- The taxi proposes its best option: earliest pickup, then earliest finish,
-  then no walking (the origin wins ties).
-- After the CONFIRM the passenger walks one district per
-  `walk_minutes_per_district` minutes, then waits. Walking is not slowed by
-  congestion. Drop-off is always at the destination.
-- With `walk_radius = 0` every result is identical to the model without
-  walking.
-
-**Boarding time (delay when reaching a passenger).** At every pickup and every
-drop-off, the taxi stays `boarding_minutes` in the district (default
-`BOARDING_MINUTES = 1`) before driving on. Several stops in the same district
-each cost `boarding_minutes`. With 0, stops are instantaneous, which
-reproduces the behaviour of stages 1-2 before boarding time was added.
-
-**Estimates vs actual movement.**
-
-- Route **planning** uses *estimates*: the sum of the cell costs along the
-  same x-first path the taxi will drive, plus `boarding_minutes` per stop,
-  starting from the taxi's cell once its current stop is finished. Minutes
-  the taxi has already driven towards its next cell are credited on that
-  cell (it still needs at least one more minute to enter it).
-- **Actual** times are measured from the simulated movement.
-- The two are always equal: planning uses exactly the costs and rules of the
-  movement, with or without congestion.
-
-**Sharing modes** (parameter `sharing_mode`):
+**Sharing modes** (`sharing_mode`):
 
 | Mode | Stage | Rule |
 |---|---|---|
 | `none` | 1 | Only idle taxis accept a request; one passenger at a time. |
-| `no_detour` | 2 | An idle taxi accepts as in `none`. A busy taxi also accepts when the new passenger's pickup district (the origin, or with walking a neighbouring district) and destination both lie, in that order, on the cells of its current planned route. The route itself does not change. |
-| `detour` | 3-4 | General **insertion search**, described below. Route changes, several stops, and up to `capacity` (1-4) passengers on board. |
+| `no_detour` | 2 | An idle taxi accepts as in `none`. A busy taxi also accepts when the new passenger's pickup district and destination both lie, in that order, on the cells of its current planned route. The route does not change. |
+| `detour` | 3-4 | General **insertion search**: route changes, several stops, up to `capacity` (1-4) passengers on board. |
 
-**Insertion search (`detour`).**
+**Insertion search (`detour`).** For a new passenger the taxi tries every pair
+of positions (i, j), i <= j: pickup at position i and drop-off at position j
+of its stop list; existing stops keep their order. This works in any state
+(idle, driving to a pickup, carrying passengers). With n planned stops there
+are (n+1)(n+2)/2 plans, each checked in O(n). A taxi takes on at most
+`BOOKINGS_PER_SEAT x capacity` passengers at a time (on board + assigned;
+`BOOKINGS_PER_SEAT = 2`), which keeps n <= 14 and the search cheap.
 
-- For a new passenger, the taxi tries every pair of positions (i, j), with
-  i <= j. It inserts the pickup at position i and the drop-off at position j
-  of its current stop list. Existing stops keep their order.
-- This works in any state: idle, driving to a pickup, or carrying passengers.
-  It also allows booking the next passenger after the current ones are
-  dropped off.
-- With n planned stops there are (n+1)(n+2)/2 candidate plans, each checked in
-  O(n).
-- A taxi takes on at most `BOOKINGS_PER_SEAT x capacity` passengers at a time
-  (on board + assigned; `BOOKINGS_PER_SEAT = 2`). This keeps n at most 14 for
-  capacity 4, so brute force stays cheap. Without that limit, one taxi could
-  queue every passenger and the search would explode.
+**Acceptance conditions** (every mode). A plan is accepted only if:
 
-**Acceptance conditions.** A candidate plan, in every mode, is accepted only
-if all of these hold:
+- the capacity is never exceeded;
+- every drop-off comes after its pickup;
+- for every passenger on board or planned, `extra_delay = estimated in-vehicle
+  time - individual time <= MAX_EXTRA_DELAY_MINUTES` (10);
+- **promise rule:** no assigned passenger's pickup moves more than 10 minutes
+  past the pickup minute promised in its CONFIRM (counted from the original
+  promise, so several insertions together can never exceed it).
 
-- the capacity is never exceeded along the plan;
-- every drop-off comes after the matching pickup;
-- for **every** passenger on board or planned:
-  `extra_delay = estimated in-vehicle time - individual time <= MAX_EXTRA_DELAY_MINUTES`;
-- **promise rule:** for every passenger who is assigned but not yet picked up,
-  the new estimated pickup is at most `MAX_EXTRA_DELAY_MINUTES` later than the
-  pickup minute promised in that passenger's CONFIRM. The limit counts from
-  the original promise, so several insertions together can never push a
-  pickup more than 10 minutes late.
+Among feasible plans the taxi picks the earliest pickup for the new passenger,
+then the earliest finish. **Individual time** (the baseline for extra delay) =
+2 x boarding + travel time of the direct x-first path from the pickup district,
+so a solo direct trip has extra delay 0. Under congestion a shared ride can use
+a different, cheaper path, so extra delay can be negative.
 
-For a passenger already on board, the estimated in-vehicle time includes the
-minutes already ridden. If several plans are feasible, the taxi picks the one
-with the earliest pickup for the new passenger, then the earliest finish. If no
-plan is feasible, the request is refused and the existing route is kept.
+**Walking to a neighbouring district (feature).** A taxi also considers each
+adjacent district (Manhattan distance 1, inside the grid, not the destination)
+as pickup district and runs its plan search for each. A walking pickup is
+offered only if the passenger can get there first: `current minute + 3 <=
+the taxi's estimated arrival there` (walking starts at the CONFIRM, sent in
+the same minute), so taxis never wait for walkers. The taxi proposes the
+earliest pickup, then earliest finish, then no walking. Drop-off is always at
+the destination. Waiting time includes the walk; individual time and extra
+delay are measured from the pickup district.
 
-`MAX_EXTRA_DELAY_MINUTES = 10` stays the same in every experiment.
+**Buses (feature).**
 
-**Individual journey time baseline:**
-`2 x boarding_minutes + travel time of the direct x-first path` (sum of its
-cell costs, so congestion included). That is the time to board, drive the
-shortest path alone, and alight, with no waiting and no detour. A passenger
-travelling alone on a direct route therefore has an extra delay of exactly 0.
-Under congestion, a shared ride can follow a different path between the same
-two districts; if that path avoids slow cells, the extra delay can be
-negative. For a passenger who walked, the baseline starts at the pickup
-district: the walk is the passenger's choice, not a delay caused by sharing.
+- **Lines:** two horizontal lines along rows h/3 and 2h/3 (H1, H2) and two
+  vertical lines along columns w/3 and 2w/3 (V1, V2): rows/columns 10 and 20
+  on 30x30. Stops every 3 districts along each line, including both ends.
+- **Buses:** 3 per line, 10 seats, spread evenly over the line at the start,
+  driving back and forth at taxi speed (congestion applies). A bus stands
+  1 minute at a stop only when someone boards or alights.
+- **Mode choice** (once, at creation): if one line has a stop within 2
+  districts (`BUS_WALK_MAX`) of the origin and a *different* stop within 2
+  districts of the destination, the passenger takes the bus, using the line
+  and stops with the least total walking; otherwise it calls a taxi. No
+  transfers between lines.
+- **Bus journey:** walk to the boarding stop (3 min per district), wait,
+  board the first bus that reaches the stop heading towards the alighting
+  stop with a free seat, ride, alight, walk to the destination. Arrival =
+  end of that walk. Bus passengers send no taxi requests and have no
+  patience; at minute 120 unfinished bus passengers are not_completed.
 
-## 6. Metrics
+## 7. Metrics
 
-All times are in simulated minutes.
-
-**When times are recorded:**
-
-- `pickup_time` is the minute the taxi reaches the pickup district (the
-  origin, or the district the passenger walked to), when boarding starts.
-- `arrival_time` is the minute alighting at the destination ends.
+All times are in simulated minutes. Averages marked "completed" include only
+passengers who reached their destination; the completed count or percentage
+is always reported next to them.
 
 | Metric | Definition |
 |---|---|
-| Waiting time | pickup - request. For a passenger who walked, this includes the walk. Patience is compared with this same pickup time. |
-| In-vehicle time | arrival - pickup. Includes own boarding/alighting, detours, and other passengers' stops. |
-| Total journey time | arrival - request (waiting + in-vehicle) |
-| Extra delay | in-vehicle time - individual time (both from the pickup district). 0 for a solo direct trip; above 0 only because of sharing. |
+| Waiting time | pickup - request. Pickup = the taxi reaches the pickup district, or the passenger boards the bus. Includes walking to the pickup district or bus stop. Patience is compared with this pickup time. |
+| In-vehicle time | pickup to end of alighting |
+| Total journey time | arrival - request. For bus passengers arrival = end of the walk to the destination. |
+| Extra delay | taxi passengers only: in-vehicle time - individual time. 0 for a solo direct trip; above 0 only because of sharing. |
 
-Averages marked "completed" include only passengers who reached their
-destination. The completed count is always reported next to them, because
-unfinished trips are excluded.
+| Reported value | Meaning |
+|---|---|
+| `completed_pct`, `avg_wait_completed`, `avg_total_completed` | over all passengers (taxi and bus) |
+| `..._taxi`, `..._bus` | the same three split by mode (empty when a mode has no passengers) |
+| `avg_extra_delay_completed`, `max_extra_delay`, `avg_extra_delay_shared` | taxi passengers only (buses have no direct-ride baseline) |
+| `avg_wait_censored` | every created passenger; unserved ones count their wait up to the deadline (a lower bound), abandoned ones up to giving up |
+| `abandoned`, `abandoned_pct` | taxi passengers who gave up waiting for a CONFIRM (not counted in `not_completed`) |
+| `acceptable_pct` | % of created passengers who completed with waiting time <= patience (always true without patience, and for bus passengers) and extra delay <= 10 min (taxi passengers) |
+| `walked_pct`, `avg_walk_minutes` | % of completed passengers who walked at all (to a neighbouring pickup district, or to/from a bus stop), and mean walking minutes over completed passengers (0 for those who did not walk) |
+| `bus_share_pct` | % of created passengers who took the bus |
+| `total_distance`, `empty_distance`, `occupied_distance`, `empty_distance_pct` | taxi districts driven (vehicle-km proxy), split by whether anyone was on board |
+| `distance_per_completed` | taxi distance per completed passenger (taxi and bus passengers) |
+| `passenger_distance`, `avg_occupancy` | districts ridden in taxis; `avg_occupancy` = passenger distance / taxi distance |
+| `bus_distance`, `avg_bus_occupancy` | districts driven by buses; bus passenger-districts / bus distance |
+| `utilization_pct`, `busy_pct` | share of taxi-minutes with a passenger on board / with any planned stop |
 
-Other reported values:
+The distances are simple proxies for vehicle travel, not measured pollution or
+congestion.
 
-- **Average extra delay:** reported over all completed passengers, and also
-  over completed passengers who shared a ride.
-- **Average waiting time including unserved:** every created passenger counts.
-  Unserved passengers count the minutes they had waited at the deadline, so
-  this value is a lower bound. Abandoned passengers count the minutes until
-  they gave up.
-- **Abandoned:** `abandoned` passengers gave up waiting for a CONFIRM after
-  their patience; `abandoned_pct` is their share of created passengers. They
-  are not counted in `not_completed`. Both are 0 when patience is disabled.
-- **Acceptable trips:** `acceptable_pct` is the percentage of created
-  passengers who completed with `waiting time <= patience` and
-  `extra delay <= MAX_EXTRA_DELAY_MINUTES`. With patience disabled, any
-  completion meets the waiting condition. A passenger can complete without
-  being acceptable: an assigned passenger never abandons, but may still be
-  picked up after their patience has run out.
-- **Walking:** `walked_pct` is the share of completed passengers who were
-  picked up in a neighbouring district. `avg_walk_minutes` is the mean walking
-  time over completed passengers (0 for those who did not walk). Both are 0
-  when walking is off. `passengers.csv` also records each passenger's
-  `pickup_district` and `walk_minutes`.
-- **Taxi distance (vehicle-km proxy):** districts driven, split into
-  `empty_distance` (no passenger on board) and `occupied_distance`.
-  `total_distance` is their sum. `empty_distance_pct` is the empty share.
-  Distance per completed passenger is also reported.
-- **Passenger distance (passenger-km proxy):** `passenger_distance` sums the
-  districts each passenger rode.
-- **Average occupancy:** `avg_occupancy = passenger_distance / total_distance`,
-  the average number of passengers per driven district.
-- Comparing vehicle and passenger distance shows how much driving sharing
-  saves per passenger served. These are simple proxies for vehicle travel, not
-  measured pollution or congestion.
-- **Utilization:** share of taxi-minutes with at least one passenger on board.
-  `busy_pct` is the share of taxi-minutes with any planned stop.
+## 8. Experiments
 
-## 7. Experiments
+**Calibration.** The base scenario was chosen so that sharing `none` with
+capacity 1 serves roughly 50-70 % of passengers. Tried on the fixed settings,
+seeds 1-5 (S1 completed % / detour capacity 4 completed %):
 
-`experiments.csv` defines 10 configurations. They vary:
+| Taxis | 60 passengers | 80 | 90 | 100 | 120 | 150 |
+|---|---|---|---|---|---|---|
+| 10 | 43.7 / 65.0 | | | 26.0 / 46.0 | | 16.5 / 31.9 |
+| 15 | 60.3 / 86.3 | | | 39.6 / 65.8 | | 27.2 / 47.7 |
+| 20 | 79.0 / 91.3 | 64.8 / 89.0 | **57.6 / 86.7** | 51.8 / 81.6 | | 36.5 / 62.3 |
+| 25 | | | | 65.4 / 89.8 | 54.7 / 85.5 | |
 
-- capacity and sharing mode;
-- arrival mode;
-- fleet size (5 vs 10 taxis);
-- demand (40/60/100 passengers);
-- duration (60 or 120 minutes).
+Chosen: **20 taxis, 90 passengers** (S1: 58.3 % over seeds 1-10, every seed
+in range), which leaves room both above (sharing) and below (congestion).
 
-Fixed in all configurations: 20x20 grid, 1 minute per district, and
-`MAX_EXTRA_DELAY_MINUTES = 10`. Every configuration runs with seeds 1-5.
+**Scenarios** (`experiments.csv`, seeds 1-10, all with 20 taxis and 90
+passengers):
 
-Demand and taxi start cells come from separate random generators seeded only by
-the seed. Configurations therefore differ only in the parameters that change:
+| Id | Sharing | Capacity | Features |
+|---|---|---|---|
+| S1 | none | 1 | – |
+| S2 | no_detour | 2 | – |
+| S3 | detour | 2 | – |
+| S4 | detour | 4 | – |
+| S5 | detour | 4 | walking |
+| S6 | detour | 4 | buses |
+| S7 | none | 1 | buses |
+| S8 | detour | 4 | congestion |
+| S9 | none | 1 | congestion |
+| S10 | detour | 4 | patience |
+| S11 | none | 1 | patience |
+| S12 | detour | 4 | all four |
 
-- With the same seed, every configuration gets the same passengers: same
-  origins, destinations and order.
-- With 40 or 60 passengers, the passengers are the first 40/60 of the
-  100-passenger list.
-- With 5 taxis, the taxis are the first 5 of the 10-taxi fleet.
-- Under `gradual`, request minutes are drawn uniformly in
-  `[0, arrival_window)`. Under `all_at_start`, every request is at minute 0.
+S1-S4 isolate the sharing level; S5-S11 add one feature to the best sharing
+setup (S4) and, for buses, congestion and patience, also to no sharing (S1);
+S12 combines everything. Demand and taxi start cells come from separate
+random generators seeded only by the seed, so for a given seed every scenario
+gets exactly the same passengers (origins, destinations, request minutes) and
+taxi starts.
 
-C1-C3 last 60 minutes; C4-C10 last 120 minutes with a 90-minute arrival window,
-which leaves 30 minutes for late requests. Compare configurations of the same
-duration.
+**Results** (mean ± standard deviation over seeds 1-10; `results/summary.csv`,
+charts in `results/charts/`):
 
-## 8. Assumptions and limitations
+| Id | Features | Completed % | Wait (min) | Total (min) | Extra delay (min) | Taxi dist./completed | Empty % | Bus % | Acceptable % |
+|---|---|---|---|---|---|---|---|---|---|
+| S1 | – | 58.3 ± 3.3 | 21.6 ± 3.3 | 42.5 ± 3.7 | 0.0 ± 0.0 | 39.5 ± 2.1 | 45.3 ± 2.6 | 0.0 | 58.3 ± 3.3 |
+| S2 | – | 58.1 ± 2.9 | 21.2 ± 3.1 | 42.1 ± 3.4 | 0.0 ± 0.0 | 39.6 ± 2.0 | 45.7 ± 2.9 | 0.0 | 58.1 ± 2.9 |
+| S3 | – | 84.0 ± 3.1 | 10.6 ± 1.7 | 35.2 ± 2.6 | 3.6 ± 0.4 | 24.1 ± 1.2 | 20.8 ± 1.9 | 0.0 | 84.0 ± 3.1 |
+| S4 | – | 86.3 ± 2.7 | 10.0 ± 1.4 | 34.8 ± 2.3 | 3.9 ± 0.2 | 23.0 ± 0.8 | 20.5 ± 1.2 | 0.0 | 86.3 ± 2.7 |
+| S5 | walk | 88.7 ± 4.9 | 8.7 ± 1.1 | 33.6 ± 2.0 | 4.0 ± 0.3 | 21.9 ± 1.1 | 17.6 ± 1.9 | 0.0 | 88.7 ± 4.9 |
+| S6 | bus | 85.7 ± 3.9 | 9.8 ± 1.2 | 34.6 ± 2.0 | 3.9 ± 0.3 | 22.6 ± 1.3 | 20.5 ± 1.6 | 5.2 ± 2.1 | 85.7 ± 3.9 |
+| S7 | bus | 61.0 ± 2.7 | 20.5 ± 3.2 | 41.7 ± 3.5 | 0.0 ± 0.0 | 37.6 ± 1.3 | 45.7 ± 2.2 | 5.2 ± 2.1 | 61.0 ± 2.7 |
+| S8 | cong | 69.4 ± 5.0 | 12.4 ± 1.4 | 42.6 ± 2.5 | 2.8 ± 0.6 | 25.7 ± 1.9 | 21.9 ± 2.7 | 0.0 | 69.4 ± 5.0 |
+| S9 | cong | 40.8 ± 2.4 | 22.4 ± 2.9 | 49.6 ± 4.1 | 0.0 ± 0.0 | 42.3 ± 3.2 | 47.8 ± 2.2 | 0.0 | 40.8 ± 2.4 |
+| S10 | pat | 81.0 ± 3.9 | 8.1 ± 0.8 | 33.2 ± 1.5 | 3.8 ± 0.3 | 22.9 ± 1.3 | 18.4 ± 1.3 | 0.0 | 78.1 ± 3.1 |
+| S11 | pat | 66.8 ± 3.8 | 12.6 ± 1.0 | 33.6 ± 1.9 | 0.0 ± 0.0 | 31.0 ± 1.9 | 31.8 ± 2.5 | 0.0 | 66.8 ± 3.8 |
+| S12 | all 4 | 71.9 ± 5.6 | 8.5 ± 0.6 | 39.0 ± 1.8 | 2.8 ± 0.7 | 21.9 ± 1.6 | 16.3 ± 2.3 | 5.2 ± 2.1 | 69.9 ± 5.0 |
 
-- The grid is abstract: no road network and no traffic from other vehicles.
-  All taxis have the same speed.
-- Congestion is a fixed, optional pattern of integer slowdown factors (centre
-  x3, ring x2). It does not change over time and does not depend on how many
-  taxis are in a district. Routes do **not** avoid congestion: taxis keep the
-  x-first path even when a detour around the centre would be faster.
-- Every pickup and drop-off takes the same fixed time (`boarding_minutes`).
-- Taxi assignment is a one-round, greedy auction run each minute. A passenger
-  accepts the lowest estimated pickup time. If that taxi has just been taken by
-  someone else, the passenger retries one minute later. There is no global
-  optimization and no reassignment once a taxi is confirmed.
+Abandoned with patience: S10 10.8 ± 4.4 %, S11 26.7 ± 3.2 %, S12 12.8 ± 3.2 %.
+These numbers are copied from the run of the current code; re-run
+`python run_experiments.py` after any change and update the table from
+`results/summary.csv`.
+
+## 9. Assumptions and limitations
+
+- The grid is abstract: no road network, no traffic from other vehicles. All
+  taxis and buses have the same speed.
+- Congestion is a fixed pattern of integer slowdown factors (centre x3, ring
+  x2). It does not change over time or with the number of vehicles. Routes
+  do **not** avoid congestion: vehicles keep the x-first path even when a
+  detour around the centre would be faster.
+- Every pickup and drop-off takes the same fixed time (1 minute).
+- Taxi assignment is a one-round greedy auction each minute: the passenger
+  accepts the lowest estimated pickup; if that taxi was just taken, it retries
+  next minute. No global optimisation, no reassignment after CONFIRM.
 - Insertion only places the new passenger's two stops; existing stops are
   never reordered.
 - The booking limit (`BOOKINGS_PER_SEAT = 2`) is a practical bound, not a
-  modelling result. It keeps about 95 % of the unbounded throughput in a test
-  configuration (48 % vs 51 % completed), while keeping each step fast.
-- With `boarding_minutes` > 0, a third or fourth passenger is rarely accepted.
-  Every extra stop costs the others time, so the 10-minute limit is reached
-  quickly.
-- Patience is a simple acceptability rule: a fixed integer per passenger,
-  drawn uniformly, compared only with the time spent waiting for a CONFIRM.
-  Once confirmed, a passenger trusts the promise and never abandons, however
-  late the pickup. An abandoned passenger does not request again. The
-  experiments in `results/` were run with patience disabled.
-- A passenger only accepts a pickup promised within its patience, but a
-  confirmed pickup can still slip up to `MAX_EXTRA_DELAY_MINUTES` past the
-  promise when the taxi later takes on other passengers. A few accepted trips
-  may therefore still wait longer than their patience; they complete, but do
-  not count in `acceptable_pct`.
-- Walking is limited to one adjacent district, decided by the taxi's offer,
-  and only at the pickup (never at the destination). The passenger does not
-  compare walking against waiting for a better offer, and walking time is not
-  counted as a cost in the extra-delay limit. Walking speed is fixed and
-  unaffected by congestion. A taxi never waits for a walker, so a walking
-  pickup is only offered when the taxi is at least the walking time away.
+  modelling result.
+- With 1-minute stops, a third or fourth passenger is rarely accepted: every
+  extra stop costs the others time, so the 10-minute limit is reached quickly
+  (S4 is close to S3).
+- **Patience** is a simple rule: a fixed integer per passenger, compared only
+  with the time spent waiting for a CONFIRM. A passenger accepts only a pickup
+  promised within its patience, but a confirmed pickup can still slip up to
+  10 minutes past the promise when the taxi later takes on others; such trips
+  complete but do not count as acceptable. An abandoned passenger does not
+  request again. Abandoning frees taxis for others, so completion can rise
+  with patience (S11 vs S1).
+- **Walking** is limited to one adjacent district at the pickup, decided by
+  the taxi's offer; the passenger does not compare walking with waiting for
+  a better offer, and walking time is not limited by the extra-delay rule.
+- **Buses:** fixed lines and timetable-free back-and-forth service; **no
+  transfers** between lines; the **mode choice rule** is a fixed walking
+  threshold (both ends within 2 districts of stops on one line), decided once
+  and never revised (a bus passenger never switches to a taxi, even when the
+  bus is slow). On 30x30 only about 5 % of passengers qualify, so buses
+  change the totals little. Buses always drive their full lines, so bus
+  occupancy is low (about 0.04-0.06 passengers per bus-district).
+- **Bus-km are not car-km:** `bus_distance` is reported separately from taxi
+  distance. A bus district and a taxi district differ in emissions and road
+  space, so the two cannot be added or compared directly as a pollution or
+  congestion measure.
 - Idle taxis wait where they are; there is no repositioning.
-- Requests made at or after the deadline are not created.
-- The grid size changes the generated demand and taxi start cells, so results
-  on different grid sizes are not comparable passenger by passenger. The
-  congestion zone keeps its 6x6 size on any grid, so it covers a smaller
-  share of a larger city.
-- Results depend on the chosen grid size and demand levels. Each configuration
-  is averaged over only 5 seeds.
-- The city map is drawn by `app.draw_city` from the model, because routes and
-  planned stops are not single agents. Mesa's `make_space_component` is not
-  used, so its zorder bug in 3.5.1 does not apply.
+- Requests at or after the deadline are not created.
+- Results depend on the chosen city size, fleet and demand; each scenario is
+  averaged over 10 seeds.
+- The city map is drawn by `app.draw_city` from the model (routes, stops and
+  bus lines are not single agents). Mesa's `make_space_component` is not used,
+  so its zorder bug in 3.5.1 does not apply.
