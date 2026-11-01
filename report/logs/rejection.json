@@ -1,0 +1,385 @@
+{
+ "name": "rejection",
+ "title": "a) Rejection and retry (single rides)",
+ "note": "",
+ "lanes": [
+  {
+   "id": 2,
+   "label": "Passenger P1"
+  },
+  {
+   "id": 1,
+   "label": "Taxi A"
+  },
+  {
+   "id": 3,
+   "label": "Passenger P2"
+  }
+ ],
+ "origins": {
+  "2": [
+   2,
+   0
+  ],
+  "3": [
+   3,
+   0
+  ]
+ },
+ "patience": {
+  "2": null,
+  "3": null
+ },
+ "messages": [
+  {
+   "minute": 0,
+   "sender": 2,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     2,
+     0
+    ],
+    "destination": [
+     2,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     3,
+     0
+    ],
+    "destination": [
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 1,
+   "receiver": 2,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 2,
+    "pickup_district": [
+     2,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 3,
+    "pickup_district": [
+     3,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 2,
+   "receiver": 1,
+   "type": "ACCEPT",
+   "data": {}
+  },
+  {
+   "minute": 0,
+   "sender": 3,
+   "receiver": 1,
+   "type": "ACCEPT",
+   "data": {}
+  },
+  {
+   "minute": 0,
+   "sender": 1,
+   "receiver": 2,
+   "type": "CONFIRM",
+   "data": {
+    "pickup_time": 2,
+    "pickup_district": [
+     2,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 1,
+   "receiver": 3,
+   "type": "REJECT",
+   "data": {}
+  },
+  {
+   "minute": 1,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     3,
+     0
+    ],
+    "destination": [
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 1,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": false,
+    "eta": null,
+    "pickup_district": null
+   }
+  },
+  {
+   "minute": 2,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     3,
+     0
+    ],
+    "destination": [
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 2,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": false,
+    "eta": null,
+    "pickup_district": null
+   }
+  },
+  {
+   "minute": 3,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     3,
+     0
+    ],
+    "destination": [
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 3,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": false,
+    "eta": null,
+    "pickup_district": null
+   }
+  },
+  {
+   "minute": 4,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     3,
+     0
+    ],
+    "destination": [
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 4,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": false,
+    "eta": null,
+    "pickup_district": null
+   }
+  },
+  {
+   "minute": 5,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     3,
+     0
+    ],
+    "destination": [
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 5,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": false,
+    "eta": null,
+    "pickup_district": null
+   }
+  },
+  {
+   "minute": 6,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     3,
+     0
+    ],
+    "destination": [
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 6,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": false,
+    "eta": null,
+    "pickup_district": null
+   }
+  },
+  {
+   "minute": 7,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     3,
+     0
+    ],
+    "destination": [
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 7,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": false,
+    "eta": null,
+    "pickup_district": null
+   }
+  },
+  {
+   "minute": 8,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     3,
+     0
+    ],
+    "destination": [
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "minute": 8,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 7,
+    "pickup_district": [
+     3,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 8,
+   "sender": 3,
+   "receiver": 1,
+   "type": "ACCEPT",
+   "data": {}
+  },
+  {
+   "minute": 8,
+   "sender": 1,
+   "receiver": 3,
+   "type": "CONFIRM",
+   "data": {
+    "pickup_time": 15,
+    "pickup_district": [
+     3,
+     0
+    ]
+   }
+  }
+ ],
+ "events": [
+  {
+   "minute": 2,
+   "agent": 2,
+   "text": "boards Taxi A at (2, 0)"
+  },
+  {
+   "minute": 9,
+   "agent": 2,
+   "text": "arrives at (2, 5), extra delay 0 min"
+  },
+  {
+   "minute": 15,
+   "agent": 3,
+   "text": "boards Taxi A at (3, 0)"
+  }
+ ]
+}

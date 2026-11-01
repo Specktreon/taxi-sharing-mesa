@@ -1,0 +1,88 @@
+{
+ "name": "walking",
+ "title": "c) Walking to a neighbouring district",
+ "note": "",
+ "lanes": [
+  {
+   "id": 2,
+   "label": "Passenger P"
+  },
+  {
+   "id": 1,
+   "label": "Taxi A"
+  }
+ ],
+ "origins": {
+  "2": [
+   5,
+   2
+  ]
+ },
+ "patience": {
+  "2": null
+ },
+ "messages": [
+  {
+   "minute": 0,
+   "sender": 2,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     5,
+     2
+    ],
+    "destination": [
+     5,
+     8
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 1,
+   "receiver": 2,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 1,
+    "pickup_district": [
+     5,
+     1
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 2,
+   "receiver": 1,
+   "type": "ACCEPT",
+   "data": {}
+  },
+  {
+   "minute": 0,
+   "sender": 1,
+   "receiver": 2,
+   "type": "CONFIRM",
+   "data": {
+    "pickup_time": 1,
+    "pickup_district": [
+     5,
+     1
+    ]
+   }
+  }
+ ],
+ "events": [
+  {
+   "minute": 1,
+   "agent": 2,
+   "text": "walks to (5, 1)"
+  },
+  {
+   "minute": 1,
+   "agent": 2,
+   "text": "boards Taxi A at (5, 1)"
+  }
+ ]
+}

@@ -1,0 +1,183 @@
+{
+ "name": "patience",
+ "title": "d) Patience: offer too late, abandon",
+ "note": "",
+ "lanes": [
+  {
+   "id": 2,
+   "label": "Passenger P"
+  },
+  {
+   "id": 1,
+   "label": "Taxi A"
+  }
+ ],
+ "origins": {
+  "2": [
+   10,
+   0
+  ]
+ },
+ "patience": {
+  "2": 5
+ },
+ "messages": [
+  {
+   "minute": 0,
+   "sender": 2,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     10,
+     0
+    ],
+    "destination": [
+     10,
+     3
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 1,
+   "receiver": 2,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 10,
+    "pickup_district": [
+     10,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 1,
+   "sender": 2,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     10,
+     0
+    ],
+    "destination": [
+     10,
+     3
+    ]
+   }
+  },
+  {
+   "minute": 1,
+   "sender": 1,
+   "receiver": 2,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 10,
+    "pickup_district": [
+     10,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 2,
+   "sender": 2,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     10,
+     0
+    ],
+    "destination": [
+     10,
+     3
+    ]
+   }
+  },
+  {
+   "minute": 2,
+   "sender": 1,
+   "receiver": 2,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 10,
+    "pickup_district": [
+     10,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 3,
+   "sender": 2,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     10,
+     0
+    ],
+    "destination": [
+     10,
+     3
+    ]
+   }
+  },
+  {
+   "minute": 3,
+   "sender": 1,
+   "receiver": 2,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 10,
+    "pickup_district": [
+     10,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 4,
+   "sender": 2,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     10,
+     0
+    ],
+    "destination": [
+     10,
+     3
+    ]
+   }
+  },
+  {
+   "minute": 4,
+   "sender": 1,
+   "receiver": 2,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 10,
+    "pickup_district": [
+     10,
+     0
+    ]
+   }
+  }
+ ],
+ "events": [
+  {
+   "minute": 5,
+   "agent": 2,
+   "text": "abandons (patience over)"
+  }
+ ]
+}

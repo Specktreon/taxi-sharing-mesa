@@ -1,0 +1,157 @@
+{
+ "name": "sharing",
+ "title": "b) Sharing with a detour (capacity 2)",
+ "note": "",
+ "lanes": [
+  {
+   "id": 2,
+   "label": "Passenger P1"
+  },
+  {
+   "id": 1,
+   "label": "Taxi A"
+  },
+  {
+   "id": 3,
+   "label": "Passenger P2"
+  }
+ ],
+ "origins": {
+  "2": [
+   0,
+   0
+  ],
+  "3": [
+   5,
+   1
+  ]
+ },
+ "patience": {
+  "2": null,
+  "3": null
+ },
+ "messages": [
+  {
+   "minute": 0,
+   "sender": 2,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     0,
+     0
+    ],
+    "destination": [
+     10,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 1,
+   "receiver": 2,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 0,
+    "pickup_district": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 0,
+   "sender": 2,
+   "receiver": 1,
+   "type": "ACCEPT",
+   "data": {}
+  },
+  {
+   "minute": 0,
+   "sender": 1,
+   "receiver": 2,
+   "type": "CONFIRM",
+   "data": {
+    "pickup_time": 0,
+    "pickup_district": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "minute": 2,
+   "sender": 3,
+   "receiver": 1,
+   "type": "REQUEST",
+   "data": {
+    "origin": [
+     5,
+     1
+    ],
+    "destination": [
+     8,
+     1
+    ]
+   }
+  },
+  {
+   "minute": 2,
+   "sender": 1,
+   "receiver": 3,
+   "type": "PROPOSE",
+   "data": {
+    "can_accept": true,
+    "eta": 5,
+    "pickup_district": [
+     5,
+     1
+    ]
+   }
+  },
+  {
+   "minute": 2,
+   "sender": 3,
+   "receiver": 1,
+   "type": "ACCEPT",
+   "data": {}
+  },
+  {
+   "minute": 2,
+   "sender": 1,
+   "receiver": 3,
+   "type": "CONFIRM",
+   "data": {
+    "pickup_time": 7,
+    "pickup_district": [
+     5,
+     1
+    ]
+   }
+  }
+ ],
+ "events": [
+  {
+   "minute": 0,
+   "agent": 2,
+   "text": "boards Taxi A at (0, 0)"
+  },
+  {
+   "minute": 7,
+   "agent": 3,
+   "text": "boards Taxi A at (5, 1)"
+  },
+  {
+   "minute": 12,
+   "agent": 3,
+   "text": "arrives at (8, 1), extra delay 0 min"
+  },
+  {
+   "minute": 16,
+   "agent": 2,
+   "text": "arrives at (10, 0), extra delay 4 min"
+  }
+ ]
+}

@@ -172,8 +172,9 @@ Columns of `experiments.csv`:
 | `plot_analysis.py` | Line charts and fleet-equivalence table for the analysis experiments |
 | `results_sweep/`, `results_fleet/`, `results_analysis/` | Their results, charts and `findings.md` |
 | `tests/` | Pytest suite (`tests/data/` holds reference results of stages 1-2) |
-| `docs/` | Map snapshots (`grid_example.png` = `map_S12.png`, `map_S1.png`, `map_S6.png`) |
+| `docs/` | Map snapshots (`grid_example.png` = `map_S12.png`, `map_S1.png`, `map_S6.png`) and message sequence diagrams (`sequence_*.png`, see "Agent communication") |
 | `REPORT_OUTLINE.md` | Outline for the 5-10 page report |
+| `report/`, `report.pdf` | The report: `report.md`, `sequence_logs.py` (message logs, saved in `report/logs/`), `make_figures.py`, `facts.py`, `check_numbers.py`, `build.py` |
 
 ## 4. Architecture and fixed settings
 
@@ -259,6 +260,52 @@ abandoned); whether the ride was shared; districts ridden in a taxi.
 **Bus state:** line, position and direction on the line, passengers on board,
 remaining minutes at the current stop, districts driven and passenger-districts
 carried.
+
+### Agent communication
+
+Taxis and taxi passengers negotiate with five message types (`messages.py`),
+delivered by `TaxiModel.send()` into the receiver's inbox. One round takes one
+minute (phases 1-5 above), like the Contract Net Protocol:
+
+| Message | From → to | Data |
+|---|---|---|
+| `REQUEST` | waiting passenger → every taxi | origin, destination |
+| `PROPOSE` | taxi → passenger | `can_accept`, `eta` (minutes to pickup), `pickup_district` |
+| `ACCEPT` | passenger → the taxi with the lowest `eta` | – |
+| `CONFIRM` | taxi → passenger | promised pickup minute, pickup district |
+| `REJECT` | taxi → passenger (it asks again next minute) | – |
+
+The diagrams below are drawn from real message logs of small deterministic
+scenarios (`report/sequence_logs.py` runs them and records every message by
+wrapping `TaxiModel.send`; `report/make_figures.py` draws them; the raw logs
+are in `report/logs/`). Repeated identical minutes are collapsed into one note.
+
+**a) Rejection and retry** — two passengers ACCEPT the only free taxi in the
+same minute; the first is confirmed, the second gets REJECT and asks again
+every minute until the taxi can take it.
+
+![Rejection and retry](docs/sequence_rejection.png)
+
+**b) Sharing** — the taxi already carries P1 when P2 asks; with detours it
+inserts P2's stops and CONFIRMs a promised pickup minute, which is kept. The
+detour costs P1 4 minutes of extra delay, within the 10-minute limit.
+
+![Sharing with a detour](docs/sequence_sharing.png)
+
+**c) Walking** — PROPOSE and CONFIRM carry a neighbouring pickup district;
+the passenger walks there and is picked up on time.
+
+![Walking to a neighbouring district](docs/sequence_walking.png)
+
+**d) Patience** — every offer would pick the passenger up after its patience
+runs out, so it sends no ACCEPT, and it abandons when its patience is over.
+
+![Patience](docs/sequence_patience.png)
+
+**e) Bus passenger** — no messages at all: it walks to its stop, boards the
+first bus going its way, rides, and walks to its destination.
+
+![Bus passenger](docs/sequence_bus.png)
 
 ## 5. Movement and congestion
 

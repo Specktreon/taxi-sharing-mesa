@@ -1,0 +1,52 @@
+{
+ "name": "bus",
+ "title": "e) Bus passenger: no negotiation",
+ "note": "0 messages: buses follow fixed lines",
+ "lanes": [
+  {
+   "id": 14,
+   "label": "Passenger P"
+  },
+  {
+   "id": 3,
+   "label": "Bus (line H1)"
+  }
+ ],
+ "origins": {
+  "14": [
+   0,
+   6
+  ]
+ },
+ "patience": {
+  "14": null
+ },
+ "messages": [],
+ "events": [
+  {
+   "minute": 3,
+   "agent": 14,
+   "text": "walks to (0, 5)"
+  },
+  {
+   "minute": 3,
+   "agent": 14,
+   "text": "reaches the stop, waits"
+  },
+  {
+   "minute": 19,
+   "agent": 14,
+   "text": "boards bus at (0, 5)"
+  },
+  {
+   "minute": 40,
+   "agent": 14,
+   "text": "leaves the bus at (19, 5)"
+  },
+  {
+   "minute": 43,
+   "agent": 14,
+   "text": "arrives at (19, 4)"
+  }
+ ]
+}
