@@ -1,5 +1,7 @@
 # Taxi-Sharing Multi-Agent Simulation (Mesa)
 
+> **The project report is [`report.pdf`](report.pdf)** (source: `report/report.md`).
+
 Master's project for *Foundations of Agent-Based Systems*.
 
 **Research question:** How does taxi sharing affect the number of passengers
@@ -532,8 +534,10 @@ trade-off, and the effect of each feature).
   promised within its patience, but a confirmed pickup can still slip up to
   10 minutes past the promise when the taxi later takes on others; such trips
   complete but do not count as acceptable. An abandoned passenger does not
-  request again. Abandoning frees taxis for others, so completion can rise
-  with patience (S11 vs S1).
+  request again. Abandoning passengers never held a taxi; completion can
+  still rise with patience (S11 vs S1) because passengers refuse offers that
+  would come after their patience, so idle taxis make fewer long empty
+  drives.
 - **Walking** is limited to one adjacent district at the pickup, decided by
   the taxi's offer; the passenger does not compare walking with waiting for
   a better offer, and walking time is not limited by the extra-delay rule.

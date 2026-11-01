@@ -68,11 +68,16 @@ pollution or road space; the totals below count vehicle movements only.
   69.4 ± 5.0 % with sharing (S4 → S8) and from 58.3 ± 3.3 % to 40.8 ± 2.4 % without
   (S1 → S9); total journey time rises to 42.6 ± 2.5 and 49.6 ± 4.1 min.
   Sharing keeps relatively more of its service (-20 % vs -30 %).
-- **Patience changes who is served.** Without sharing, 26.7 ± 3.2 % of passengers
-  abandon, which frees taxis: completion rises to 66.8 ± 3.8 % (S11 vs 58.3 % in
-  S1) and the wait falls to 12.6 ± 1.0 min. With sharing, 10.8 ± 4.4 % abandon,
-  completion falls to 81.0 ± 3.9 % and acceptable trips to 78.1 ± 3.1 % (S10 vs
-  86.3 ± 2.7 % in S4).
+- **Patience changes which offers are taken.** A patient passenger ignores any
+  offer whose pickup would come after its patience runs out, so idle taxis are
+  no longer sent on long empty drives (abandoning passengers never held a
+  taxi). Without sharing, 26.7 ± 3.2 % abandon, but the empty share falls from
+  45.3 ± 2.6 % to 31.8 ± 2.5 % and taxi distance per completed passenger from
+  39.5 ± 2.1 to 31.0 ± 1.9, so completion rises to 66.8 ± 3.8 % (S11 vs 58.3 % in
+  S1) and the wait falls to 12.6 ± 1.0 min. With sharing almost everyone is
+  confirmed in the first round, so patience only removes passengers whose
+  offers came too late: 10.8 ± 4.4 % abandon, completion falls to 81.0 ± 3.9 %
+  and acceptable trips to 78.1 ± 3.1 % (S10 vs 86.3 ± 2.7 % in S4).
 - **All four features together** (S12) complete 75.8 ± 5.4 %, between S4 and the
   congestion-only S8. Its taxis drive the least per completed passenger of
   S1-S12 (19.9 ± 1.7 districts; empty share 17.0 ± 2.3 %), but adding the buses

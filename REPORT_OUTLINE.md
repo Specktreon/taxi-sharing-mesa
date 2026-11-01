@@ -109,8 +109,12 @@ Write the results only from `results/summary.csv`, `results/runs.csv` and
   Discuss the mode-choice rule and the fixed lines.
 - Congestion: the largest loss (S8, S9); sharing keeps more of its benefit than
   single rides.
-- Patience: abandonment frees taxis, so completion can rise without sharing
-  (S11 vs S1) while acceptable % falls with sharing (S10 vs S4); explain via
+- Patience: passengers refuse offers whose pickup would come after their
+  patience, so idle taxis no longer make long empty drives; completion rises
+  without sharing (S11 vs S1: lower empty share and taxi distance per
+  completed passenger), while with sharing (almost everyone confirmed in the
+  first round) patience only removes late offers and acceptable % falls
+  (S10 vs S4). Abandoning passengers never held a taxi. Explain via
   `acceptable_pct`.
 - Traffic and pollution through proxies only: taxi distance per passenger,
   empty share, occupancy, and total vehicle distance (taxi + bus); bus-km are
